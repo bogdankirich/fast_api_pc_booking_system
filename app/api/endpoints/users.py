@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies.dependencies import get_user_service
+from app.api.dependencies.dependencies import get_current_user, get_user_service
 from app.db.database import get_db_session
+from app.models.user import User
 from app.schemas.user import UserCreate, UserResponce
 from app.services.user import UserService
 
@@ -20,3 +21,8 @@ async def register_user(
         return new_user
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/me", response_model=UserResponce)
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
