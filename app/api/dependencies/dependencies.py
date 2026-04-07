@@ -6,10 +6,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import ALGORITHM, SECRET_KEY
 from app.db.database import get_db_session
 from app.models.user import User
+from app.repositories.pc import PCRepository
 from app.repositories.user import UserRepository
+from app.repositories.zone import ZoneRepository
+from app.services.pc import PCService
 from app.services.user import UserService
+from app.services.zone import ZoneService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login")
+
+
+def get_zone_repository() -> ZoneRepository:
+    return ZoneRepository()
+
+
+def get_pc_repository() -> PCRepository:
+    return PCRepository()
+
+
+def get_zone_service(
+    repo: ZoneRepository = Depends(get_zone_repository),
+) -> ZoneService:
+    return ZoneService(zone_repo=repo)
+
+
+def get_pc_service(
+    pc_repo: PCRepository = Depends(get_pc_repository),
+    zone_repo: ZoneRepository = Depends(get_zone_repository),
+) -> PCService:
+    return PCService(pc_repo=pc_repo, zone_repo=zone_repo)
 
 
 def get_user_repository() -> UserRepository:
