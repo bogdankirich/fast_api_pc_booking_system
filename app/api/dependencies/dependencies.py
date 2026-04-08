@@ -6,9 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import ALGORITHM, SECRET_KEY
 from app.db.database import get_db_session
 from app.models.user import User
+from app.repositories.booking import BookingRepository
 from app.repositories.pc import PCRepository
 from app.repositories.user import UserRepository
 from app.repositories.zone import ZoneRepository
+from app.services.booking import BookingService
 from app.services.pc import PCService
 from app.services.user import UserService
 from app.services.zone import ZoneService
@@ -45,6 +47,20 @@ def get_user_service(
     repo: UserRepository = Depends(get_user_repository),
 ) -> UserService:
     return UserService(user_repo=repo)
+
+
+def get_booking_repository() -> BookingRepository:
+    return BookingRepository()
+
+
+def get_booking_service(
+    booking_repo: BookingRepository = Depends(get_booking_repository),
+    pc_repo: PCRepository = Depends(get_pc_repository),
+    zone_repo: ZoneRepository = Depends(get_zone_repository),
+) -> BookingService:
+    return BookingService(
+        booking_repo=booking_repo, pc_repo=pc_repo, zone_repo=zone_repo
+    )
 
 
 async def get_current_user(
