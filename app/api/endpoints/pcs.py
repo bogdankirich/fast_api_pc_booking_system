@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies.dependencies import get_current_user, get_pc_service
+from app.api.dependencies.dependencies import get_current_admin_user, get_pc_service
 from app.db.database import get_db_session
 from app.models.user import User
 from app.schemas.pc import PCCreate, PCResponce
@@ -15,7 +15,7 @@ async def create_pc(
     pc_in: PCCreate,
     db: AsyncSession = Depends(get_db_session),
     pc_service: PCService = Depends(get_pc_service),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
 ):
     return await pc_service.create_pc(db, pc_in=pc_in)
 
