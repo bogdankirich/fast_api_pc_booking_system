@@ -10,12 +10,34 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  web:
-    build: . 
+  redis:
+    image: redis:7-alpine
     ports:
-      - "8000:8000" 
+      - "6379:6379"
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
     depends_on:
-      - db 
+      - db
+      - redis 
+
+ 
+  celery_worker:
+    build: . 
+    command: celery -A app.core.celery_app worker --loglevel=info
+    depends_on:
+      - db
+      - redis
+
+  
+  celery_beat:
+    build: .
+    command: celery -A app.core.celery_app beat --loglevel=info
+    depends_on:
+      - db
+      - redis
 
 volumes:
   postgres_data:
