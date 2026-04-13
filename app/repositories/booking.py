@@ -14,12 +14,15 @@ class BookingRepository(BaseRepository[Booking, BookingCreate]):
         super().__init__(Booking)
 
     async def get_active_by_user(
-        self, db: AsyncSession, *, user_id: int
+        self, db: AsyncSession, *, user_id: int, skip: int = 0, limit: int = 100
     ) -> Sequence[Booking]:
-        query = select(self.model).where(
-            self.model.user_id == user_id, self.model.status == "active"
+        stmt = (
+            select(Booking)
+            .where(Booking.user_id == user_id, Booking.status == "active")
+            .offset(skip)
+            .limit(limit)
         )
-        result = await db.execute(query)
+        result = await db.execute(stmt)
         return result.scalars().all()
 
     async def check_overlap(

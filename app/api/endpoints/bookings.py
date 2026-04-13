@@ -27,10 +27,12 @@ async def create_booking(
 
 @router.get("/", response_model=list[BookingResponce])
 async def get_my_bookings(
+    skip: int = 0,
+    limit: int = 10,
     db: AsyncSession = Depends(get_db_session),
     booking_service: BookingService = Depends(get_booking_service),
     current_user: User = Depends(get_current_user),
 ):
     return await booking_service.booking_repo.get_active_by_user(
-        db, user_id=current_user.id
+        db, user_id=current_user.id, skip=skip, limit=limit
     )
