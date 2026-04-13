@@ -2,9 +2,11 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-DATABASE_URL = "postgresql+asyncpg://postgres:postgres@db:5432/booking_db"
+from app.core.config import settings
 
-engine = create_async_engine(DATABASE_URL, echo=False, pool_size=5, max_overflow=10)
+engine = create_async_engine(
+    settings.DATABASE_URL, echo=False, pool_size=5, max_overflow=10
+)
 
 async_session_maker = async_sessionmaker(
     bind=engine,
