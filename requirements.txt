@@ -75,3 +75,4 @@ websockets==16.0
 celery
 redis
 pydantic-settings
+httpx
