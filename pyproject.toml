@@ -5,3 +5,4 @@ testpaths = ["tests"]
 filterwarnings = [
     "ignore::DeprecationWarning"
 ]
+addopts = "--cov=app --cov-report=term-missing"
