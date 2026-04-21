@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.dependencies import get_current_admin_user, get_pc_service
@@ -10,7 +10,7 @@ from app.services.pc import PCService
 router = APIRouter(prefix="/pcs", tags=["PCs"])
 
 
-@router.post("/", response_model=PCResponce)
+@router.post("/", response_model=PCResponce, status_code=status.HTTP_201_CREATED)
 async def create_pc(
     pc_in: PCCreate,
     db: AsyncSession = Depends(get_db_session),

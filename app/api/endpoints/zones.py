@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.dependencies import get_current_admin_user, get_zone_service
@@ -10,7 +10,7 @@ from app.services.zone import ZoneService
 router = APIRouter(prefix="/zones", tags=["Zones"])
 
 
-@router.post("/", response_model=ZoneResponce)
+@router.post("/", response_model=ZoneResponce, status_code=status.HTTP_201_CREATED)
 async def create_zone(
     zone_in: ZoneCreate,
     db: AsyncSession = Depends(get_db_session),
