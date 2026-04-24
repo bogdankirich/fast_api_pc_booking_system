@@ -1,0 +1,36 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest 
+
+    steps:      
+      - name: Checkout source code
+        uses: actions/checkout@v4
+      
+      - name: Create test .env file
+        run: |
+          echo "POSTGRES_USER=postgres" >> .env
+          echo "POSTGRES_PASSWORD=199825" >> .env
+          echo "POSTGRES_DB=booking_db" >> .env
+          echo "POSTGRES_HOST=db" >> .env
+          echo "POSTGRES_PORT=5432" >> .env
+          echo "CELERY_BROKER_URL=redis://redis:6379/0" >> .env
+          echo "CELERY_RESULT_BACKEND=redis://redis:6379/0" >> .env
+          echo "SECRET_KEY=super_secret_test_key_123" >> .env
+          echo "ALGORITHM=HS256" >> .env
+      
+      - name: Build and Start Docker Containers
+        run: docker compose up --build -d
+      
+      - name: Wait for database to initialize
+        run: sleep 5
+     
+      - name: Run Pytest
+        run: docker compose exec -T web pytest -v --cov=app --cov-report=term
