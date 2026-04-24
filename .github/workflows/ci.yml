@@ -37,6 +37,9 @@ jobs:
         run: |
           docker compose ps
           docker compose logs web
+    
+      - name: Create Test Database
+        run: docker compose exec -T db psql -U postgres -c "CREATE DATABASE test_booking_db;"
      
       - name: Run Pytest
         run: docker compose exec -T web pytest -v --cov=app --cov-report=term
