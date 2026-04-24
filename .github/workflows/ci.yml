@@ -30,7 +30,12 @@ jobs:
         run: docker compose up --build -d
       
       - name: Wait for database to initialize
-        run: sleep 5
+        run: sleep 15
+
+      - name: Check container status and logs
+        run: |
+          docker compose ps
+          docker compose logs web
      
       - name: Run Pytest
         run: docker compose exec -T web pytest -v --cov=app --cov-report=term
