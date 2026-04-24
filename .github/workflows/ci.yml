@@ -25,6 +25,7 @@ jobs:
           echo "CELERY_RESULT_BACKEND=redis://redis:6379/0" >> .env
           echo "SECRET_KEY=super_secret_test_key_123" >> .env
           echo "ALGORITHM=HS256" >> .env
+          echo "ACCESS_TOKEN_EXPIRE_MINUTES=30" >> .env
       
       - name: Build and Start Docker Containers
         run: docker compose up --build -d
