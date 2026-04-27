@@ -13,6 +13,10 @@ class UserService:
     async def create_user(self, db: AsyncSession, user_in: UserCreate) -> User:
         existing_user = await self.user_repo.get_by_email(db, email=user_in.email)
         if existing_user:
+            if existing_user.auth_provider == "google":
+                raise ValueError(
+                    "This email is registered via Google. Please log in using Google."
+                )
             raise ValueError("User with this email already existing")
         user_data = user_in.model_dump(exclude={"password"})
         user_data["hashed_password"] = get_password_hash(user_in.password)
@@ -32,6 +36,21 @@ class UserService:
         user = await self.user_repo.get_by_email(db, email=email)
         if not user:
             return None
+        if user.hashed_password is None:
+            return None
         if not verify_password(password, user.hashed_password):
             return None
         return user
+
+    async def get_or_create_google_user(self, db: AsyncSession, email: str) -> User:
+        user = await self.user_repo.get_by_email(db, email=email)
+        if user:
+            return user
+
+        user_data = {"email": email, "auth_provider": "google", "hashed_password": None}
+
+        db_obj = User(**user_data)
+        db.add(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
+        return db_obj

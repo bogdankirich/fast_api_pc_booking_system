@@ -1,13 +1,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.endpoints import auth, bookings, pcs, users, zones
+from app.core.config import settings
 
 app = FastAPI(
     title="Computer Club Booking System API",
     description="Production-ready API for Booking",
     version="1.0.0",
 )
+
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 app.add_middleware(
     CORSMiddleware,

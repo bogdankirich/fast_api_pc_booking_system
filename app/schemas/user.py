@@ -13,9 +13,14 @@ class UserCreate(UserBase):
     )
 
 
-class UserResponce(UserBase):
+class UserCreateGoogle(UserBase):
+    auth_provider: str = "google"
+
+
+class UserResponse(UserBase):
     id: int
     balance: Decimal
     role: str
+    auth_provider: str
 
     model_config = ConfigDict(from_attributes=True)

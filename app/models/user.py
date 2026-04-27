@@ -13,9 +13,12 @@ if TYPE_CHECKING:
 class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    hashed_password: Mapped[str] = mapped_column(String(255))
+    hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     balance: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0.0"))
     role: Mapped[str] = mapped_column(String(50), default="user")
+    auth_provider: Mapped[str] = mapped_column(
+        String(50), default="local", server_default="local"
+    )
     bookings: Mapped[list["Booking"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
