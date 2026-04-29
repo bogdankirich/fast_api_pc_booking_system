@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -128,8 +127,6 @@ async def test_refresh_token_success(async_client: AsyncClient):
         "/api/v1/login", data={"username": email, "password": password}
     )
     old_refresh_token = login_response.json()["refresh_token"]
-
-    await asyncio.sleep(1)
 
     refresh_response = await async_client.post(
         "/api/v1/refresh", json={"refresh_token": old_refresh_token}
