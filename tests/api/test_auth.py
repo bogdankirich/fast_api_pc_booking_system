@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -112,3 +113,63 @@ async def test_auth_google_callback_existing_local_user(
 
     assert response.status_code == 200
     assert "access_token" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_success(async_client: AsyncClient):
+    email = "refresh_success@gmail.com"
+    password = "superpassword"
+
+    await async_client.post(
+        "/api/v1/users/", json={"email": email, "password": password}
+    )
+
+    login_response = await async_client.post(
+        "/api/v1/login", data={"username": email, "password": password}
+    )
+    old_refresh_token = login_response.json()["refresh_token"]
+
+    await asyncio.sleep(1)
+
+    refresh_response = await async_client.post(
+        "/api/v1/refresh", json={"refresh_token": old_refresh_token}
+    )
+
+    assert refresh_response.status_code == 200
+    new_tokens = refresh_response.json()
+    assert "access_token" in new_tokens
+    assert "refresh_token" in new_tokens
+
+    assert new_tokens["refresh_token"] != old_refresh_token
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_invalid_signature(async_client: AsyncClient):
+    fake_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.invalid.token"
+
+    response = await async_client.post(
+        "/api/v1/refresh", json={"refresh_token": fake_token}
+    )
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_wrong_type(async_client: AsyncClient):
+    email = "wrong_type@gmail.com"
+    password = "superpassword"
+
+    await async_client.post(
+        "/api/v1/users/", json={"email": email, "password": password}
+    )
+    login_response = await async_client.post(
+        "/api/v1/login", data={"username": email, "password": password}
+    )
+
+    access_token = login_response.json()["access_token"]
+
+    refresh_response = await async_client.post(
+        "/api/v1/refresh", json={"refresh_token": access_token}
+    )
+
+    assert refresh_response.status_code == 401
