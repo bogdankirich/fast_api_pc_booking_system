@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 465
 
     @computed_field
     @property

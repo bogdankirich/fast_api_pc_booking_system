@@ -8,6 +8,7 @@ from app.repositories.booking import BookingRepository
 from app.repositories.pc import PCRepository
 from app.repositories.zone import ZoneRepository
 from app.schemas.booking import BookingCreate
+from app.tasks.email import send_receipt
 
 
 class BookingService:
@@ -58,4 +59,13 @@ class BookingService:
         db.add(db_obj)
         await db.commit()
         await db.refresh(db_obj)
+
+        send_receipt.delay(
+            user_email=current_user.email,
+            pc_id=db_obj.pc_id,
+            start_time=db_obj.start_time.isoformat(),
+            end_time=db_obj.end_time.isoformat(),
+            total_cost=str(db_obj.total_cost),
+        )
+
         return db_obj
