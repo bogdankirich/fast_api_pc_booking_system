@@ -9,7 +9,7 @@ from app.core.config import settings
 
 @celery_app.task
 def send_receipt(
-    user_email: str, pc_id: int, start_time: str, end_time: str, total_cost: Decimal
+    user_email: str, pc_id: int, start_time: str, end_time: str, total_cost: str
 ):
     if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
         print("SMTP credentials are not set. Skipping email.")
