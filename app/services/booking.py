@@ -27,7 +27,7 @@ class BookingService:
         if booking_in.start_time >= booking_in.end_time:
             raise ValueError("End time should be later than start time")
 
-        pc = await self.pc_repo.get(db, id=booking_in.pc_id)
+        pc = await self.pc_repo.get_with_lock(db, id=booking_in.pc_id)
         if not pc:
             raise ValueError("PC not found")
 

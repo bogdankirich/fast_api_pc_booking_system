@@ -16,3 +16,8 @@ class PCRepository(BaseRepository[PC, PCCreate]):
         query = select(self.model).where(self.model.zone_id == zone_id)
         result = await db.execute(query)
         return result.scalars().all()
+
+    async def get_with_lock(self, db: AsyncSession, id: int) -> PC | None:
+        query = select(self.model).where(self.model.id == id).with_for_update()
+        result = await db.execute(query)
+        return result.scalar_one_or_none()

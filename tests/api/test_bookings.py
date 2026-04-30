@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -163,4 +164,107 @@ async def test_create_overlapping_booking_fails(
 
     assert resp2.status_code in (400, 409), (
         f"System allowed overlapping booking! Response: {resp2.json()}"
+    )
+
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@pytest.mark.asyncio
+async def test_create_booking_concurrent_race_condition(
+    async_client: AsyncClient, db: AsyncSession
+):
+
+    admin_reg = await async_client.post(
+        "/api/v1/users/", json={"email": "admin3@gmail.com", "password": "password123"}
+    )
+    assert admin_reg.status_code == 201, f"Admin reg failed: {admin_reg.json()}"
+
+    await db.execute(
+        update(User).where(User.email == "admin3@gmail.com").values(role="admin")
+    )
+    await db.commit()
+
+    admin_login = await async_client.post(
+        "/api/v1/login",
+        data={"username": "admin3@gmail.com", "password": "password123"},
+    )
+    assert admin_login.status_code == 200, f"Admin login failed: {admin_login.json()}"
+    admin_headers = {"Authorization": f"Bearer {admin_login.json()['access_token']}"}
+
+    zone_resp = await async_client.post(
+        "/api/v1/zones/",
+        json={"name": "Race Zone", "hourly_rate": 100.0},
+        headers=admin_headers,
+    )
+    assert zone_resp.status_code == 201, f"Zone failed: {zone_resp.json()}"
+    zone_id = zone_resp.json()["id"]
+
+    pc_resp = await async_client.post(
+        "/api/v1/pcs/",
+        json={"mac_address": "CC:DD:EE:FF", "zone_id": zone_id},
+        headers=admin_headers,
+    )
+    assert pc_resp.status_code == 201, f"PC failed: {pc_resp.json()}"
+    pc_id = pc_resp.json()["id"]
+
+    gamer1_reg = await async_client.post(
+        "/api/v1/users/",
+        json={"email": "race_gamer1@gmail.com", "password": "password123"},
+    )
+    assert gamer1_reg.status_code == 201
+
+    gamer2_reg = await async_client.post(
+        "/api/v1/users/",
+        json={"email": "race_gamer2@gmail.com", "password": "password123"},
+    )
+    assert gamer2_reg.status_code == 201
+
+    login1 = await async_client.post(
+        "/api/v1/login",
+        data={"username": "race_gamer1@gmail.com", "password": "password123"},
+    )
+    assert login1.status_code == 200
+    token1 = login1.json()["access_token"]
+
+    login2 = await async_client.post(
+        "/api/v1/login",
+        data={"username": "race_gamer2@gmail.com", "password": "password123"},
+    )
+    assert login2.status_code == 200
+    token2 = login2.json()["access_token"]
+
+    now = datetime.now(timezone.utc)
+    start_time = (now + timedelta(hours=1)).isoformat()
+    end_time = (now + timedelta(hours=3)).isoformat()
+
+    payload = {
+        "pc_id": pc_id,
+        "start_time": start_time,
+        "end_time": end_time,
+    }
+
+    response1, response2 = await asyncio.gather(
+        async_client.post(
+            "/api/v1/bookings/",
+            json=payload,
+            headers={"Authorization": f"Bearer {token1}"},
+        ),
+        async_client.post(
+            "/api/v1/bookings/",
+            json=payload,
+            headers={"Authorization": f"Bearer {token2}"},
+        ),
+    )
+
+    statuses = [response1.status_code, response2.status_code]
+
+    assert 201 in statuses or 200 in statuses, (
+        f"Expected one success, got statuses: {statuses}. \nResp1: {response1.text} \nResp2: {response2.text}"
+    )
+
+    assert 400 in statuses, (
+        f"Expected one failure (blocked by lock), got statuses: {statuses}. \nResp1: {response1.text} \nResp2: {response2.text}"
     )
