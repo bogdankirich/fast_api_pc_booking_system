@@ -167,11 +167,6 @@ async def test_create_overlapping_booking_fails(
     )
 
 
-import pytest
-from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
-
-
 @pytest.mark.asyncio
 async def test_create_booking_concurrent_race_condition(
     async_client: AsyncClient, db: AsyncSession
