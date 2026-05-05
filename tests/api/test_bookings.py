@@ -3,10 +3,90 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.bookings import Booking
 from app.models.user import User
+
+
+async def _setup_cancellation_env(
+    async_client: AsyncClient, db: AsyncSession, suffix: str
+) -> dict:
+    await async_client.post(
+        "/api/v1/users/",
+        json={"email": f"admin_{suffix}@gmail.com", "password": "password123"},
+    )
+    await db.execute(
+        update(User)
+        .where(User.email == f"admin_{suffix}@gmail.com")
+        .values(role="admin")
+    )
+    await db.commit()
+    admin_token = (
+        await async_client.post(
+            "/api/v1/login",
+            data={"username": f"admin_{suffix}@gmail.com", "password": "password123"},
+        )
+    ).json()["access_token"]
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    zone_resp = await async_client.post(
+        "/api/v1/zones/",
+        json={"name": f"Zone {suffix}", "hourly_rate": 100.0},
+        headers=admin_headers,
+    )
+    pc_resp = await async_client.post(
+        "/api/v1/pcs/",
+        json={
+            "mac_address": f"AA:BB:CC:DD:{suffix}",
+            "zone_id": zone_resp.json()["id"],
+        },
+        headers=admin_headers,
+    )
+    pc_id = pc_resp.json()["id"]
+
+    await async_client.post(
+        "/api/v1/users/",
+        json={"email": f"owner_{suffix}@gmail.com", "password": "password123"},
+    )
+    owner_token = (
+        await async_client.post(
+            "/api/v1/login",
+            data={"username": f"owner_{suffix}@gmail.com", "password": "password123"},
+        )
+    ).json()["access_token"]
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+
+    await async_client.post(
+        "/api/v1/users/",
+        json={"email": f"other_{suffix}@gmail.com", "password": "password123"},
+    )
+    other_token = (
+        await async_client.post(
+            "/api/v1/login",
+            data={"username": f"other_{suffix}@gmail.com", "password": "password123"},
+        )
+    ).json()["access_token"]
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+
+    now = datetime.now(timezone.utc)
+    booking_resp = await async_client.post(
+        "/api/v1/bookings/",
+        json={
+            "pc_id": pc_id,
+            "start_time": (now + timedelta(hours=1)).isoformat(),
+            "end_time": (now + timedelta(hours=2)).isoformat(),
+        },
+        headers=owner_headers,
+    )
+
+    return {
+        "admin_headers": admin_headers,
+        "owner_headers": owner_headers,
+        "other_headers": other_headers,
+        "booking_id": booking_resp.json()["id"],
+    }
 
 
 @pytest.mark.asyncio
@@ -263,3 +343,94 @@ async def test_create_booking_concurrent_race_condition(
     assert 400 in statuses, (
         f"Expected one failure (blocked by lock), got statuses: {statuses}. \nResp1: {response1.text} \nResp2: {response2.text}"
     )
+
+
+@pytest.mark.asyncio
+async def test_cancel_booking_by_owner_success(
+    async_client: AsyncClient, db: AsyncSession
+):
+    env = await _setup_cancellation_env(async_client, db, "own")
+    booking_id = env["booking_id"]
+
+    response = await async_client.delete(
+        f"/api/v1/bookings/{booking_id}", headers=env["owner_headers"]
+    )
+    assert response.status_code == 204
+
+    stmt = select(Booking).where(Booking.id == booking_id)
+    result = await db.execute(stmt)
+    booking_in_db = result.scalars().first()
+    assert booking_in_db is not None
+    assert booking_in_db.status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_cancel_booking_by_admin_success(
+    async_client: AsyncClient, db: AsyncSession
+):
+    env = await _setup_cancellation_env(async_client, db, "adm")
+    booking_id = env["booking_id"]
+
+    # Админ отменяет чужое бронирование
+    response = await async_client.delete(
+        f"/api/v1/bookings/{booking_id}", headers=env["admin_headers"]
+    )
+    assert response.status_code == 204
+
+    stmt = select(Booking).where(Booking.id == booking_id)
+    result = await db.execute(stmt)
+    booking_in_db = result.scalars().first()
+
+    assert booking_in_db is not None, "Booking must exist in DB"
+    assert booking_in_db.status == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_cancel_booking_rbac_forbidden(
+    async_client: AsyncClient, db: AsyncSession
+):
+    env = await _setup_cancellation_env(async_client, db, "rbac")
+    booking_id = env["booking_id"]
+
+    response = await async_client.delete(
+        f"/api/v1/bookings/{booking_id}", headers=env["other_headers"]
+    )
+    assert response.status_code == 403
+    assert (
+        "you do not have the right to cancel this booking"
+        in response.json()["detail"].lower()
+    )
+
+    stmt = select(Booking).where(Booking.id == booking_id)
+    result = await db.execute(stmt)
+    booking_in_db = result.scalars().first()
+
+    assert booking_in_db is not None, "Booking must exist in DB"
+    assert booking_in_db.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_cancel_booking_not_found(async_client: AsyncClient, db: AsyncSession):
+    env = await _setup_cancellation_env(async_client, db, "404")
+
+    response = await async_client.delete(
+        "/api/v1/bookings/999999", headers=env["owner_headers"]
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Couldn't find booking"
+
+
+@pytest.mark.asyncio
+async def test_cancel_booking_idempotency(async_client: AsyncClient, db: AsyncSession):
+    env = await _setup_cancellation_env(async_client, db, "idem")
+    booking_id = env["booking_id"]
+
+    resp1 = await async_client.delete(
+        f"/api/v1/bookings/{booking_id}", headers=env["owner_headers"]
+    )
+    assert resp1.status_code == 204
+
+    resp2 = await async_client.delete(
+        f"/api/v1/bookings/{booking_id}", headers=env["owner_headers"]
+    )
+    assert resp2.status_code == 204

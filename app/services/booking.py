@@ -78,7 +78,7 @@ class BookingService:
             return False
         if booking.user_id != current_user.id and current_user.role != "admin":
             raise PermissionError("You do not have the right to cancel this booking")
-        if booking.status == "canceled":
+        if booking.status == "cancelled":
             return True
 
         await self.booking_repo.cancel_booking(db, booking)
