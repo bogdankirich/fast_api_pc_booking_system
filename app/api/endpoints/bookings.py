@@ -36,3 +36,22 @@ async def get_my_bookings(
     return await booking_service.booking_repo.get_active_by_user(
         db, user_id=current_user.id, skip=skip, limit=limit
     )
+
+
+@router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_booking(
+    booking_id: int,
+    db: AsyncSession = Depends(get_db_session),
+    booking_service: BookingService = Depends(get_booking_service),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        deleted = await booking_service.cancel_booking(
+            db, booking_id=booking_id, current_user=current_user
+        )
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Couldn't find booking"
+            )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))

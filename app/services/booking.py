@@ -69,3 +69,17 @@ class BookingService:
         )
 
         return db_obj
+
+    async def cancel_booking(
+        self, db: AsyncSession, booking_id: int, current_user: User
+    ) -> bool:
+        booking = await self.booking_repo.get(db, id=booking_id)
+        if not booking:
+            return False
+        if booking.user_id != current_user.id and current_user.role != "admin":
+            raise PermissionError("You do not have the right to cancel this booking")
+        if booking.status == "canceled":
+            return True
+
+        await self.booking_repo.cancel_booking(db, booking)
+        return True

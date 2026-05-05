@@ -36,3 +36,10 @@ class BookingRepository(BaseRepository[Booking, BookingCreate]):
         )
         result = await db.execute(query)
         return result.scalars().first() is not None
+
+    async def cancel_booking(self, db: AsyncSession, booking: Booking) -> Booking:
+        booking.status = "cancelled"
+        db.add(booking)
+        await db.commit()
+        await db.refresh(booking)
+        return booking
