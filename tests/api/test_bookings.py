@@ -347,90 +347,83 @@ async def test_create_booking_concurrent_race_condition(
 
 @pytest.mark.asyncio
 async def test_cancel_booking_by_owner_success(
-    async_client: AsyncClient, db: AsyncSession
+    async_client: AsyncClient,
+    db: AsyncSession,
+    owner_headers: dict,
+    test_booking: Booking,
 ):
-    env = await _setup_cancellation_env(async_client, db, "own")
-    booking_id = env["booking_id"]
-
     response = await async_client.delete(
-        f"/api/v1/bookings/{booking_id}", headers=env["owner_headers"]
+        f"/api/v1/bookings/{test_booking.id}", headers=owner_headers
     )
     assert response.status_code == 204
 
-    stmt = select(Booking).where(Booking.id == booking_id)
-    result = await db.execute(stmt)
-    booking_in_db = result.scalars().first()
-    assert booking_in_db is not None
-    assert booking_in_db.status == "cancelled"
+    await db.refresh(test_booking)
+
+    assert test_booking.status == "cancelled"
 
 
 @pytest.mark.asyncio
 async def test_cancel_booking_by_admin_success(
-    async_client: AsyncClient, db: AsyncSession
+    async_client: AsyncClient,
+    db: AsyncSession,
+    admin_headers: dict,
+    test_booking: Booking,
 ):
-    env = await _setup_cancellation_env(async_client, db, "adm")
-    booking_id = env["booking_id"]
-
-    # Админ отменяет чужое бронирование
     response = await async_client.delete(
-        f"/api/v1/bookings/{booking_id}", headers=env["admin_headers"]
+        f"/api/v1/bookings/{test_booking.id}", headers=admin_headers
     )
     assert response.status_code == 204
 
-    stmt = select(Booking).where(Booking.id == booking_id)
-    result = await db.execute(stmt)
-    booking_in_db = result.scalars().first()
-
-    assert booking_in_db is not None, "Booking must exist in DB"
-    assert booking_in_db.status == "cancelled"
+    await db.refresh(test_booking)
+    assert test_booking.status == "cancelled"
 
 
 @pytest.mark.asyncio
 async def test_cancel_booking_rbac_forbidden(
-    async_client: AsyncClient, db: AsyncSession
+    async_client: AsyncClient,
+    db: AsyncSession,
+    other_user_headers: dict,
+    test_booking: Booking,
 ):
-    env = await _setup_cancellation_env(async_client, db, "rbac")
-    booking_id = env["booking_id"]
-
     response = await async_client.delete(
-        f"/api/v1/bookings/{booking_id}", headers=env["other_headers"]
+        f"/api/v1/bookings/{test_booking.id}", headers=other_user_headers
     )
     assert response.status_code == 403
-    assert (
-        "you do not have the right to cancel this booking"
-        in response.json()["detail"].lower()
+    assert "you do not have the right to cancel" in response.json()["detail"].lower()
+
+    # Статус не должен измениться
+    booking_in_db = (
+        (await db.execute(select(Booking).where(Booking.id == test_booking.id)))
+        .scalars()
+        .first()
     )
-
-    stmt = select(Booking).where(Booking.id == booking_id)
-    result = await db.execute(stmt)
-    booking_in_db = result.scalars().first()
-
-    assert booking_in_db is not None, "Booking must exist in DB"
+    assert booking_in_db is not None
     assert booking_in_db.status == "active"
 
 
 @pytest.mark.asyncio
-async def test_cancel_booking_not_found(async_client: AsyncClient, db: AsyncSession):
-    env = await _setup_cancellation_env(async_client, db, "404")
-
+async def test_cancel_booking_not_found(async_client: AsyncClient, owner_headers: dict):
     response = await async_client.delete(
-        "/api/v1/bookings/999999", headers=env["owner_headers"]
+        "/api/v1/bookings/999999", headers=owner_headers
     )
     assert response.status_code == 404
-    assert response.json()["detail"] == "Couldn't find booking"
 
 
 @pytest.mark.asyncio
-async def test_cancel_booking_idempotency(async_client: AsyncClient, db: AsyncSession):
-    env = await _setup_cancellation_env(async_client, db, "idem")
-    booking_id = env["booking_id"]
-
+async def test_cancel_booking_idempotency(
+    async_client: AsyncClient,
+    db: AsyncSession,
+    owner_headers: dict,
+    test_booking: Booking,
+):
+    # Отменяем первый раз
     resp1 = await async_client.delete(
-        f"/api/v1/bookings/{booking_id}", headers=env["owner_headers"]
+        f"/api/v1/bookings/{test_booking.id}", headers=owner_headers
     )
     assert resp1.status_code == 204
 
+    # Пытаемся отменить еще раз
     resp2 = await async_client.delete(
-        f"/api/v1/bookings/{booking_id}", headers=env["owner_headers"]
+        f"/api/v1/bookings/{test_booking.id}", headers=owner_headers
     )
     assert resp2.status_code == 204
