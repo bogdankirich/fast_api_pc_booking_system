@@ -7,6 +7,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from tg_bot.keyboards import get_main_menu
+
 router = Router()
 
 
@@ -17,6 +19,7 @@ class BookStates(StatesGroup):
 
 
 @router.message(Command("book"))
+@router.message(F.text == "🖥 Забронировать ПК")
 async def cmd_book(message: Message, state: FSMContext):
     user_data = await state.get_data()
     access_token = user_data.get("access_token")
@@ -215,7 +218,8 @@ async def process_pc_selection(callback: CallbackQuery, state: FSMContext):
                     f"🖥 ПК #{booking['pc_id']}\n"
                     f"⏰ Начало: {booking['start_time']}\n"
                     f"⏰ Конец: {booking['end_time']}\n"
-                    f"💰 Стоимость: {booking['total_cost']}"
+                    f"💰 Стоимость: {booking['total_cost']}",
+                    reply_markup=get_main_menu(),
                 )
             elif response.status_code == 401:
                 await callback.message.answer(
@@ -228,5 +232,7 @@ async def process_pc_selection(callback: CallbackQuery, state: FSMContext):
         except httpx.RequestError as e:
             await callback.message.answer(f"❌ Ошибка подключения к API: {str(e)}")
 
+    refresh_token = user_data.get("refresh_token")
     await state.clear()
+    await state.update_data(access_token=access_token, refresh_token=refresh_token)
     await callback.answer()

@@ -5,6 +5,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
+from tg_bot.keyboards import get_main_menu, get_start_menu
+
 router = Router()
 
 
@@ -14,6 +16,7 @@ class LoginStates(StatesGroup):
 
 
 @router.message(Command("login"))
+@router.message(F.text == "🔑 Войти")
 async def cmd_login(message: Message, state: FSMContext):
     await message.answer("Введите ваш email:")
     await state.set_state(LoginStates.waiting_for_email)
@@ -57,17 +60,27 @@ async def process_password(message: Message, state: FSMContext):
                     access_token=access_token,
                     refresh_token=refresh_token,
                 )
-                await message.answer("✅ Успешный вход!")
+                await message.answer(
+                    "✅ Вы успешно вошли!", reply_markup=get_main_menu()
+                )
             elif response.status_code in (401, 400):
                 error_detail = response.json().get(
                     "detail", "Неверный email или пароль"
                 )
-                await message.answer(f"❌ Ошибка: {error_detail}")
+                await message.answer(
+                    f"❌ Ошибка: {error_detail}", reply_markup=get_start_menu()
+                )
                 await state.clear()
             else:
-                await message.answer(f"❌ Ошибка сервера: {response.status_code}")
+                await message.answer(
+                    f"❌ Ошибка сервера: {response.status_code}",
+                    reply_markup=get_start_menu(),
+                )
                 await state.clear()
 
         except httpx.RequestError as e:
-            await message.answer(f"❌ Ошибка подключения к API: {str(e)}")
+            await message.answer(
+                f"❌ Ошибка подключения к API: {str(e)}",
+                reply_markup=get_start_menu(),
+            )
             await state.clear()
