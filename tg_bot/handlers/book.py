@@ -49,7 +49,7 @@ async def cmd_book(message: Message, state: FSMContext):
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
-                                text=f"{zone['name']}", callback_data=f"zone_{zone['id']}"
+                                text=zone["name"], callback_data=f"book_zone_{zone['id']}"
                             )
                         ]
                         for zone in zones
@@ -70,17 +70,17 @@ async def cmd_book(message: Message, state: FSMContext):
             await message.answer(f"❌ Ошибка подключения к API: {str(e)}")
 
 
-@router.callback_query(BookStates.waiting_for_zone, F.data.startswith("zone_"))
+@router.callback_query(BookStates.waiting_for_zone, F.data.startswith("book_zone_"))
 async def process_zone_selection(callback: CallbackQuery, state: FSMContext):
     if callback.data is None or callback.message is None:
         await callback.answer("Ошибка: данные не получены")
         return
 
-    zone_id = int(callback.data.split("_")[1])
+    zone_id = int(callback.data.split("_")[2])
     await state.update_data(zone_id=zone_id)
 
     await callback.message.answer(
-        "Введите время бронирования в формате ЧЧ:ММ ЧЧ:ММ\n"
+        "Введите время бронирования на сегодня в формате ЧЧ:ММ ЧЧ:ММ\n"
         "Например: 14:00 16:00"
     )
     await state.set_state(BookStates.waiting_for_time)
@@ -150,9 +150,9 @@ async def process_time(message: Message, state: FSMContext):
 
                 if not pcs:
                     await message.answer(
-                        "❌ Нет свободных ПК на выбранное время. Попробуйте другое время."
+                        "❌ В этой зоне нет свободных ПК на это время.\n"
+                        "Введите другое время в формате ЧЧ:ММ ЧЧ:ММ или начните заново с /book"
                     )
-                    await state.clear()
                     return
 
                 keyboard = InlineKeyboardMarkup(
@@ -176,12 +176,18 @@ async def process_time(message: Message, state: FSMContext):
                 await state.clear()
             else:
                 error_detail = response.json().get("detail", "Неизвестная ошибка")
-                await message.answer(f"❌ Ошибка: {error_detail}")
-                await state.clear()
+                await message.answer(
+                    f"❌ Ошибка: {error_detail}\n\n"
+                    "Попробуйте ввести другое время в формате ЧЧ:ММ ЧЧ:ММ"
+                )
+                return
 
         except httpx.RequestError as e:
-            await message.answer(f"❌ Ошибка подключения к API: {str(e)}")
-            await state.clear()
+            await message.answer(
+                f"❌ Ошибка подключения к API: {str(e)}\n\n"
+                "Попробуйте ввести время снова или начните заново с /book"
+            )
+            return
 
 
 @router.callback_query(BookStates.waiting_for_pc, F.data.startswith("book_pc_"))
@@ -193,6 +199,7 @@ async def process_pc_selection(callback: CallbackQuery, state: FSMContext):
     pc_id = int(callback.data.split("_")[2])
     user_data = await state.get_data()
     access_token = user_data.get("access_token")
+    refresh_token = user_data.get("refresh_token")
     start_time = user_data.get("start_time")
     end_time = user_data.get("end_time")
 
@@ -227,12 +234,13 @@ async def process_pc_selection(callback: CallbackQuery, state: FSMContext):
                 )
             else:
                 error_detail = response.json().get("detail", "Неизвестная ошибка")
-                await callback.message.answer(f"❌ Ошибка при создании брони: {error_detail}")
+                await callback.message.answer(
+                    f"❌ Ошибка при создании брони: {error_detail}"
+                )
 
         except httpx.RequestError as e:
             await callback.message.answer(f"❌ Ошибка подключения к API: {str(e)}")
 
-    refresh_token = user_data.get("refresh_token")
     await state.clear()
     await state.update_data(access_token=access_token, refresh_token=refresh_token)
     await callback.answer()
