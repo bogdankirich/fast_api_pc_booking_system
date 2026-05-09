@@ -5,7 +5,7 @@ import os
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from tg_bot.handlers import auth, bookings, common
+from tg_bot.handlers import auth, book, bookings, common
 
 
 async def main():
@@ -22,6 +22,7 @@ async def main():
     dp.include_router(common.router)
     dp.include_router(auth.router)
     dp.include_router(bookings.router)
+    dp.include_router(book.router)
 
     logging.info("Starting Telegram Bot...")
     await dp.start_polling(bot)
