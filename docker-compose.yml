@@ -55,6 +55,15 @@ services:
     depends_on:
       - db
       - redis
+  
+  bot:
+    build: .
+    command: python -m tg_bot.main
+    env_file:
+      - .env
+    depends_on:
+      - web
+    restart: always
 
 volumes:
   postgres_data:

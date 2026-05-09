@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 465
+    TELEGRAM_BOT_TOKEN: str
 
     @computed_field
     @property
