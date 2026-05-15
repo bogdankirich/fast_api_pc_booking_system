@@ -1,4 +1,4 @@
-from aiogram import F, Router
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -20,10 +20,12 @@ async def cmd_start(message: Message):
     )
 
 
-@router.message(F.text == "⚙️ Настройки профиля")
-async def settings_menu(message: Message):
-    await message.answer(
-        "⚙️ Настройки профиля\n\n"
-        "Здесь будут настройки вашего профиля.\n"
-        "Функционал в разработке."
-    )
+#
+# @router.message(F.text == "⚙️ Настройки профиля")
+# async def settings_menu(message: Message):
+#    await message.answer(
+#        "⚙️ Настройки профиля\n\n"
+#        "Здесь будут настройки вашего профиля.\n"
+#        "Функционал в разработке."
+#    )
+#

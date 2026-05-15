@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
 from redis.asyncio import Redis
 
-from tg_bot.handlers import auth, book, bookings, common
+from tg_bot.handlers import auth, book, bookings, common, profile
 
 
 async def main():
@@ -24,6 +24,7 @@ async def main():
 
     dp.include_router(common.router)
     dp.include_router(auth.router)
+    dp.include_router(profile.router)
     dp.include_router(bookings.router)
     dp.include_router(book.router)
 
