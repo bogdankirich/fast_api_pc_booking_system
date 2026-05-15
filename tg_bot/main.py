@@ -3,7 +3,8 @@ import logging
 import os
 
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.redis import RedisStorage
+from redis.asyncio import Redis
 
 from tg_bot.handlers import auth, book, bookings, common
 
@@ -15,8 +16,10 @@ async def main():
     if not token:
         raise ValueError("TELEGRAM_BOT_TOKEN не найден в .env")
 
+    redis_client = Redis.from_url("redis://redis:6379/1", decode_responses=True)
+    storage = RedisStorage(redis=redis_client)
+
     bot = Bot(token=token)
-    storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
 
     dp.include_router(common.router)
@@ -24,8 +27,12 @@ async def main():
     dp.include_router(bookings.router)
     dp.include_router(book.router)
 
-    logging.info("Starting Telegram Bot...")
-    await dp.start_polling(bot)
+    try:
+        logging.info("Starting Telegram Bot...")
+        await dp.start_polling(bot)
+    finally:
+        await redis_client.aclose()
+        await bot.session.close()
 
 
 if __name__ == "__main__":
