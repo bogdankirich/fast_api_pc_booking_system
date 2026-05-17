@@ -1,4 +1,6 @@
+from datetime import datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +11,7 @@ from app.repositories.pc import PCRepository
 from app.repositories.zone import ZoneRepository
 from app.schemas.booking import BookingCreate
 from app.tasks.email import send_receipt
+from app.tasks.telegram_notifications import send_booking_reminder
 
 
 class BookingService:
@@ -67,6 +70,26 @@ class BookingService:
             end_time=db_obj.end_time.isoformat(),
             total_cost=str(db_obj.total_cost),
         )
+
+        if current_user.telegram_id:
+            end_time_naive = db_obj.end_time.replace(tzinfo=None)
+
+            now_local_naive = datetime.now(ZoneInfo("Europe/Kyiv")).replace(tzinfo=None)
+
+            seconds_until_end = (end_time_naive - now_local_naive).total_seconds()
+            countdown_seconds = int(seconds_until_end - (15 * 60))
+
+            if countdown_seconds > 0:
+                end_time_str = db_obj.end_time.strftime("%H:%M")
+
+                send_booking_reminder.apply_async(  # type: ignore
+                    kwargs={
+                        "telegram_id": current_user.telegram_id,
+                        "pc_number": db_obj.pc_id,
+                        "end_time_str": end_time_str,
+                    },
+                    countdown=countdown_seconds,
+                )
 
         return db_obj
 

@@ -7,7 +7,11 @@ celery_app = Celery(
     "booking_tasks",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.tasks.bookings", "app.tasks.email"],
+    include=[
+        "app.tasks.bookings",
+        "app.tasks.email",
+        "app.tasks.telegram_notifications",
+    ],
 )
 
 
