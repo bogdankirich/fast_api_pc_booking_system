@@ -26,6 +26,7 @@ jobs:
           echo "SECRET_KEY=super_secret_test_key_123" >> .env
           echo "ALGORITHM=HS256" >> .env
           echo "ACCESS_TOKEN_EXPIRE_MINUTES=30" >> .env
+          echo "TELEGRAM_BOT_TOKEN=123456789:ABCDEF_fake_token_for_ci" >> .env
       
       - name: Build and Start Docker Containers
         run: docker compose up --build -d
