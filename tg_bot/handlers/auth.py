@@ -6,8 +6,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from tg_bot.keyboards import get_main_menu, get_start_menu
+from tg_bot.utils.api_client import APIClient
 
 router = Router()
+api_client = APIClient()
 
 
 class LoginStates(StatesGroup):
@@ -60,6 +62,19 @@ async def process_password(message: Message, state: FSMContext):
                     access_token=access_token,
                     refresh_token=refresh_token,
                 )
+                if message.from_user:
+                    try:
+                        await api_client.request(
+                            method="PATCH",
+                            endpoint="/api/v1/users/me",
+                            state=state,
+                            json={"telegram_id": message.from_user.id},
+                        )
+                    except Exception as e:
+                        print(f"Ошибка привязки Telegram ID: {e}")
+                else:
+                    print("Не удалось получить telegram_id (from_user is None)")
+
                 await message.answer(
                     "✅ Вы успешно вошли!", reply_markup=get_main_menu()
                 )

@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Numeric, String
+from sqlalchemy import BigInteger, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -18,6 +18,9 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(50), default="user")
     auth_provider: Mapped[str] = mapped_column(
         String(50), default="local", server_default="local"
+    )
+    telegram_id: Mapped[int | None] = mapped_column(
+        BigInteger, unique=True, nullable=True
     )
     bookings: Mapped[list["Booking"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies.dependencies import get_current_user, get_user_service
 from app.db.database import get_db_session
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.services.user import UserService
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -26,3 +26,19 @@ async def register_user(
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_users_me(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+    user_service: UserService = Depends(get_user_service),
+):
+    try:
+        updated_user = await user_service.update_user(
+            db=db, db_user=current_user, update_data=user_update
+        )
+        return updated_user
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

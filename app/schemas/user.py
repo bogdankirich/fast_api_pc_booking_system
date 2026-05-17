@@ -17,10 +17,15 @@ class UserCreateGoogle(UserBase):
     auth_provider: str = "google"
 
 
+class UserUpdate(BaseModel):
+    telegram_id: int | None = Field(None, description="Telegram User ID")
+
+
 class UserResponse(UserBase):
     id: int
     balance: Decimal
     role: str
     auth_provider: str
+    telegram_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
