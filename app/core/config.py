@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 465
     TELEGRAM_BOT_TOKEN: str
+    MONOBANK_API_TOKEN: str = ""
+    BASE_URL: str = "http://localhost:8000"
 
     @computed_field
     @property
