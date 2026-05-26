@@ -15,6 +15,11 @@ class TransactionStatus(str, enum.Enum):
     FAILED = "failed"
 
 
+class TransactionType(str, enum.Enum):
+    DEPOSIT = "deposit"
+    WITHDRAWAL = "withdrawal"
+
+
 class Transaction(Base):
     __tablename__: str = "transactions"
 
@@ -22,6 +27,7 @@ class Transaction(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     status: Mapped[TransactionStatus] = mapped_column(default=TransactionStatus.PENDING)
+    type: Mapped[TransactionType] = mapped_column(default=TransactionType.DEPOSIT)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

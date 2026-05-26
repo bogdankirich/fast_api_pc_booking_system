@@ -9,7 +9,12 @@ from app.db.database import get_db_session
 from app.models.transactions import Transaction, TransactionStatus
 from app.models.user import User
 from app.repositories.transaction import TransactionRepository
-from app.schemas.transaction import MonoBankWebhookRequest, TopUpRequest, TopUpResponse
+from app.schemas.transaction import (
+    MonoBankWebhookRequest,
+    TopUpRequest,
+    TopUpResponse,
+    TransactionHistoryResponse,
+)
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.services.payment import MonoPayService
 from app.services.user import UserService
@@ -109,3 +114,12 @@ async def monobank_webhook(
         return {"status": "failed"}
 
     return {"status": "pending"}
+
+
+@router.get("/me/transactions", response_model=list[TransactionHistoryResponse])
+async def get_user_transaction_history(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    transaction_repo = TransactionRepository(Transaction)
+    return await transaction_repo.get_user_history(db, current_user.id)

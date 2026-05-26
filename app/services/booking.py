@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.bookings import Booking
+from app.models.transactions import Transaction, TransactionStatus, TransactionType
 from app.models.user import User
 from app.repositories.booking import BookingRepository
 from app.repositories.pc import PCRepository
@@ -53,6 +54,13 @@ class BookingService:
 
         total_cost = round(duration_hours * zone.hourly_rate, 2)
 
+        if current_user.balance < total_cost:
+            raise ValueError(
+                f"Недостаточно средств. Стоимость: {total_cost} ₴, ваш баланс: {current_user.balance} ₴."
+            )
+
+        current_user.balance -= total_cost
+
         booking_data = booking_in.model_dump()
         booking_data["user_id"] = current_user.id
         booking_data["total_cost"] = total_cost
@@ -60,6 +68,15 @@ class BookingService:
 
         db_obj = Booking(**booking_data)
         db.add(db_obj)
+
+        withdrawal_tx = Transaction(
+            user_id=current_user.id,
+            amount=total_cost,
+            status=TransactionStatus.SUCCESS,
+            type=TransactionType.WITHDRAWAL,
+        )
+        db.add(withdrawal_tx)
+
         await db.commit()
         await db.refresh(db_obj)
 
@@ -73,15 +90,12 @@ class BookingService:
 
         if current_user.telegram_id:
             end_time_naive = db_obj.end_time.replace(tzinfo=None)
-
             now_local_naive = datetime.now(ZoneInfo("Europe/Kyiv")).replace(tzinfo=None)
-
             seconds_until_end = (end_time_naive - now_local_naive).total_seconds()
             countdown_seconds = int(seconds_until_end - (15 * 60))
 
             if countdown_seconds > 0:
                 end_time_str = db_obj.end_time.strftime("%H:%M")
-
                 send_booking_reminder.apply_async(  # type: ignore
                     kwargs={
                         "telegram_id": current_user.telegram_id,

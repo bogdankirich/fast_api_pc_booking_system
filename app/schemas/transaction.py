@@ -1,6 +1,10 @@
+from datetime import datetime
 from decimal import Decimal
+from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.transactions import TransactionStatus, TransactionType
 
 
 class TopUpRequest(BaseModel):
@@ -20,3 +24,13 @@ class MonoBankWebhookRequest(BaseModel):
     amount: int
     ccy: int
     reference: str
+
+
+class TransactionHistoryResponse(BaseModel):
+    id: UUID
+    amount: Decimal
+    status: TransactionStatus
+    type: TransactionType
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
