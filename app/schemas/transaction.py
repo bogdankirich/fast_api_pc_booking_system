@@ -18,14 +18,6 @@ class TopUpResponse(BaseModel):
     payment_url: str
 
 
-class MonoBankWebhookRequest(BaseModel):
-    invoiceId: str
-    status: str
-    amount: int
-    ccy: int
-    reference: str
-
-
 class TransactionHistoryResponse(BaseModel):
     id: UUID
     amount: Decimal

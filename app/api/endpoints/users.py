@@ -1,25 +1,26 @@
-from decimal import Decimal
+import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+import stripe
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.dependencies import get_current_user, get_user_service
+from app.core.config import settings
 from app.db.database import get_db_session
-from app.models.transactions import Transaction, TransactionStatus
+from app.models.transactions import Transaction
 from app.models.user import User
 from app.repositories.transaction import TransactionRepository
 from app.schemas.transaction import (
-    MonoBankWebhookRequest,
     TopUpRequest,
     TopUpResponse,
     TransactionHistoryResponse,
 )
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
-from app.services.payment import MonoPayService
+from app.services.payment import StripePayService
 from app.services.user import UserService
 
 router = APIRouter(prefix="/users", tags=["Users"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -62,58 +63,63 @@ async def top_up_balance(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
+
     transaction_repo = TransactionRepository(Transaction)
     transaction = await transaction_repo.create_pending_transaction(
         db=db, user_id=current_user.id, amount=request.amount
     )
 
-    payment_service = MonoPayService()
-    payment_url = await payment_service.create_invoice(
-        amount=Decimal(request.amount),
-        order_id=str(transaction.id),
-        description=f"Пополнение баланса клуба. Пользователь: {current_user.email}",
+    payment_service = StripePayService()
+    payment_url = await payment_service.create_checkout_session(
+        amount=request.amount,
+        transaction_id=str(transaction.id),
+        user_email=current_user.email,
     )
+
     if not payment_url:
         raise HTTPException(
             status_code=500,
-            detail="Временно невозможно создать платеж. Сервис Монобанка недоступен.",
+            detail="Временно невозможно создать платеж. Сервис Stripe недоступен.",
         )
 
     return TopUpResponse(transaction_id=str(transaction.id), payment_url=payment_url)
 
 
-@router.post("/webhook/monobank", status_code=200)
-async def monobank_webhook(
-    webhook_data: MonoBankWebhookRequest, db: AsyncSession = Depends(get_db_session)
-):
-    query = select(Transaction).where(Transaction.id == webhook_data.reference)
-    result = await db.execute(query)
-    transaction = result.scalar_one_or_none()
+@router.post("/webhook/stripe", status_code=200)
+async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db_session)):
+    payload = await request.body()
+    stripe_signature = request.headers.get("stripe-signature")
 
-    if not transaction:
-        return {"status": "ignored"}
+    if not stripe_signature:
+        raise HTTPException(status_code=400, detail="Missing signature header")
 
-    if transaction.status == TransactionStatus.SUCCESS:
-        return {"status": "already_processed"}
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, stripe_signature, settings.STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError:
+        logger.warning("Stripe Webhook: Invalid payload received")
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.SignatureVerificationError:
+        logger.warning("Stripe Webhook: Invalid signature received")
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
-    if webhook_data.status == "success":
-        user_query = select(User).where(User.id == transaction.user_id)
-        user_result = await db.execute(user_query)
-        user = user_result.scalar_one()
-        transaction.status = TransactionStatus.SUCCESS
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
 
-        added_amount = Decimal(webhook_data.amount) / 100
-        user.balance += added_amount
+        transaction_id = session.client_reference_id
 
-        await db.commit()
-        return {"status": "success"}
+        if not transaction_id:
+            return {"status": "missing_reference"}
 
-    elif webhook_data.status in ["failure", "declined", "expired"]:
-        transaction.status = TransactionStatus.FAILED
-        await db.commit()
-        return {"status": "failed"}
+        transaction_repo = TransactionRepository(Transaction)
+        result_status = await transaction_repo.confirm_deposit_transaction(
+            db, transaction_id
+        )
 
-    return {"status": "pending"}
+        return {"status": result_status}
+
+    return {"status": "ignored"}
 
 
 @router.get("/me/transactions", response_model=list[TransactionHistoryResponse])

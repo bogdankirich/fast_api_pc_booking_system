@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str
     MONOBANK_API_TOKEN: str = ""
     BASE_URL: str = "http://localhost:8000"
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
 
     @computed_field
     @property

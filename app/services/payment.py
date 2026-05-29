@@ -1,54 +1,46 @@
 import logging
 from decimal import Decimal
 
-import httpx
+import stripe
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+stripe.api_key = settings.STRIPE_SECRET_KEY
 
-class MonoPayService:
-    def __init__(self):
-        self.api_url = "https://api.monobank.ua/api/merchant/invoice/create"
-        self.headers = {
-            "X-Token": settings.MONOBANK_API_TOKEN,
-            "Content-Type": "application/json",
-        }
 
-    async def create_invoice(
-        self, amount: Decimal, order_id: str, description: str
+class StripePayService:
+    async def create_checkout_session(
+        self, amount: Decimal, transaction_id: str, user_email: str
     ) -> str | None:
+        try:
+            amount_cents = int(amount * 100)
 
-        if settings.MONOBANK_API_TOKEN == "test_token_12345":
-            logger.info(
-                f"MOCK: Симуляция создания платежа в Монобанке для заказа {order_id}"
+            session = await stripe.checkout.Session.create_async(
+                payment_method_types=["card"],
+                line_items=[
+                    {
+                        "price_data": {
+                            "currency": "uah",
+                            "product_data": {
+                                "name": "Пополнение баланса аккаунта",
+                                "description": f"Личный счет в системе бронирования ПК. Пользователь: {user_email}",
+                            },
+                            "unit_amount": amount_cents,
+                        },
+                        "quantity": 1,
+                    }
+                ],
+                mode="payment",
+                client_reference_id=transaction_id,
+                success_url=f"{settings.BASE_URL}/profile?status=success",
+                cancel_url=f"{settings.BASE_URL}/profile?status=cancelled",
+                customer_email=user_email,
             )
-            # Возвращаем фейковую ссылку для фронтенда
-            return f"https://mock-pay.monobank.ua/checkout/{order_id}"
-        amount_cents = int(amount * 100)
-        webhook_url = f"{settings.BASE_URL}/api/v1/payments/webhook/monobank"
 
-        payload = {
-            "amount": amount_cents,
-            "ccy": 980,
-            "merchantPaymInfo": {
-                "reference": order_id,
-                "destination": description,
-            },
-            "redirectUrl": f"{settings.BASE_URL}/profile",
-            "webHookUrl": webhook_url,
-        }
+            return session.url
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    self.api_url, json=payload, headers=self.headers
-                )
-                response.raise_for_status()
-                data = response.json()
-                return data.get("pageUrl")
-
-            except httpx.HTTPError as e:
-                logger.error(f"Ошибка при создании инвойса Monobank: {e}")
-                return None
+        except stripe.StripeError as e:
+            logger.error(f"Ошибка при создании Stripe Checkout Session: {e}")
+            return None
