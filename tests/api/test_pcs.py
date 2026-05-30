@@ -15,7 +15,7 @@ async def test_get_available_pcs(async_client: AsyncClient, db: AsyncSession):
         json={"email": "admin_pc@gmail.com", "password": "password123"},
     )
     await db.execute(
-        update(User).where(User.email == "admin_pc@gmail.com").values(role="admin")
+        update(User).where(User.email == "admin_pc@gmail.com").values(role="admin", balance=5000.0)
     )
     await db.commit()
 

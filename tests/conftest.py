@@ -229,12 +229,26 @@ async def build_booking_env(
     pc_id = pc_resp.json()["id"]
 
     # Owner
-    owner_token = await create_user_and_login(async_client, f"owner_{suffix}@gmail.com")
+    owner_email = f"owner_{suffix}@gmail.com"
+    owner_token = await create_user_and_login(async_client, owner_email)
     owner_hdrs = auth_headers(owner_token)
 
+    # Grant balance to owner
+    await db.execute(
+        update(User).where(User.email == owner_email).values(balance=5000.0)
+    )
+    await db.commit()
+
     # Other
-    other_token = await create_user_and_login(async_client, f"other_{suffix}@gmail.com")
+    other_email = f"other_{suffix}@gmail.com"
+    other_token = await create_user_and_login(async_client, other_email)
     other_hdrs = auth_headers(other_token)
+
+    # Grant balance to other user
+    await db.execute(
+        update(User).where(User.email == other_email).values(balance=5000.0)
+    )
+    await db.commit()
 
     result = {
         "admin_headers": admin_hdrs,

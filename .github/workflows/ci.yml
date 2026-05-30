@@ -27,6 +27,9 @@ jobs:
           echo "ALGORITHM=HS256" >> .env
           echo "ACCESS_TOKEN_EXPIRE_MINUTES=30" >> .env
           echo "TELEGRAM_BOT_TOKEN=123456789:ABCDEF_fake_token_for_ci" >> .env
+          echo "STRIPE_SECRET_KEY: sk_test_mock_123" >> .env
+          echo "STRIPE_WEBHOOK_SECRET: whsec_mock_456" >> .env
+          echo "STRIPE_PUBLISHABLE_KEY: pk_test_51T" >> .env
       
       - name: Build and Start Docker Containers
         run: docker compose up --build -d

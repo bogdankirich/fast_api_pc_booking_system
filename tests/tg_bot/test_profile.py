@@ -153,13 +153,21 @@ async def test_callback_logout_clears_state(
 
 
 @pytest.mark.asyncio
-async def test_callback_topup_shows_alert(callback_query: CallbackQuery) -> None:
+async def test_callback_topup_unauthorized_shows_alert(
+    callback_query: CallbackQuery,
+) -> None:
     callback_query.data = "topup"
 
-    await callback_topup(callback_query)
+    # Создаем фейковый стейт, который вернет пустой словарь (без токена)
+    mock_state = AsyncMock(spec=FSMContext)
+    mock_state.get_data.return_value = {}
+
+    # Передаем state в функцию!
+    await callback_topup(callback_query, state=mock_state)
 
     callback_query.answer.assert_called_once()  # type: ignore
     call_args = callback_query.answer.call_args  # type: ignore
 
-    assert "пополнения баланса" in call_args[0][0]
+    # Проверяем новую логику ответа
+    assert "Сессия истекла" in call_args[0][0]
     assert call_args[1]["show_alert"] is True

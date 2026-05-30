@@ -45,7 +45,16 @@ async def test_create_overlapping_booking_fails(
         async_client, db, suffix="overlap", hours_from_now=(1, 3)
     )
 
-    gamer2_token = await create_user_and_login(async_client, "gamer2_overlap@gmail.com")
+    gamer2_email = "gamer2_overlap@gmail.com"
+    gamer2_token = await create_user_and_login(async_client, gamer2_email)
+
+    from sqlalchemy import update
+    from app.models.user import User
+
+    await db.execute(
+        update(User).where(User.email == gamer2_email).values(balance=5000.0)
+    )
+    await db.commit()
 
     now = datetime.now(timezone.utc)
     resp2 = await async_client.post(
@@ -70,8 +79,21 @@ async def test_create_booking_concurrent_race_condition(
 
     env = await build_booking_env(async_client, db, suffix="race")
 
-    gamer1_token = await create_user_and_login(async_client, "race_gamer1@gmail.com")
-    gamer2_token = await create_user_and_login(async_client, "race_gamer2@gmail.com")
+    gamer1_email = "race_gamer1@gmail.com"
+    gamer2_email = "race_gamer2@gmail.com"
+    gamer1_token = await create_user_and_login(async_client, gamer1_email)
+    gamer2_token = await create_user_and_login(async_client, gamer2_email)
+
+    from sqlalchemy import update
+    from app.models.user import User
+
+    await db.execute(
+        update(User).where(User.email == gamer1_email).values(balance=5000.0)
+    )
+    await db.execute(
+        update(User).where(User.email == gamer2_email).values(balance=5000.0)
+    )
+    await db.commit()
 
     now = datetime.now(timezone.utc)
     payload = {
