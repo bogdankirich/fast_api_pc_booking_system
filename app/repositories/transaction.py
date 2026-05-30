@@ -34,28 +34,30 @@ class TransactionRepository(BaseRepository[Transaction, TopUpResponse]):
 
     async def confirm_deposit_transaction(
         self, db: AsyncSession, transaction_id: str
-    ) -> str:
+    ) -> tuple[str, int | None, float | None]:
+
         query = select(Transaction).where(Transaction.id == transaction_id)
         result = await db.execute(query)
         transaction = result.scalar_one_or_none()
 
         if not transaction:
-            return "not_found"
+            return "not_found", None, None
 
         if transaction.status == TransactionStatus.SUCCESS:
-            return "already_processed"
+            return "already_processed", None, None
 
         user_query = select(User).where(User.id == transaction.user_id)
         user_result = await db.execute(user_query)
         user = user_result.scalar_one_or_none()
 
         if not user:
-            return "user_not_found"
+            return "user_not_found", None, None
 
         transaction.status = TransactionStatus.SUCCESS
         transaction.type = TransactionType.DEPOSIT
-
         user.balance += transaction.amount
 
         await db.commit()
-        return "success"
+
+        #
+        return "success", user.telegram_id, float(transaction.amount)

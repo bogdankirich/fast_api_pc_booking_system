@@ -1,5 +1,6 @@
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -12,6 +13,10 @@ from tg_bot.utils.api_client import APIClient
 
 router = Router()
 api_client = APIClient()
+
+
+class TopUpStates(StatesGroup):
+    waiting_for_amount = State()
 
 
 @router.message(F.text == "⚙️ Настройки профиля")
@@ -81,8 +86,88 @@ async def callback_logout(callback: CallbackQuery, state: FSMContext):
 
 
 @router.callback_query(F.data == "topup")
-async def callback_topup(callback: CallbackQuery):
-    await callback.answer(
-        "💳 Функция пополнения баланса появится после интеграции платежной системы.",
-        show_alert=True,
-    )
+async def callback_topup(callback: CallbackQuery, state: FSMContext):
+    """
+    Ловим нажатие кнопки 'Пополнить баланс' и просим ввести сумму.
+    """
+    user_data = await state.get_data()
+    if not user_data.get("access_token"):
+        await callback.answer(
+            "❌ Сессия истекла. Пожалуйста, авторизуйтесь заново.", show_alert=True
+        )
+        return
+    if isinstance(callback.message, Message):
+        await callback.message.answer(
+            "💳 <b>Введите сумму пополнения в гривнах:</b>\n<i>(Например: 100, 250, 500)</i>",
+            parse_mode="HTML",
+        )
+        await state.set_state(TopUpStates.waiting_for_amount)
+    await callback.answer()
+
+
+@router.message(TopUpStates.waiting_for_amount)
+async def process_topup_amount(message: Message, state: FSMContext):
+    """
+    Принимаем сумму, делаем запрос к FastAPI и возвращаем инлайн-кнопку со ссылкой на Stripe.
+    """
+    if not message.text:
+        await message.answer("❌ Пожалуйста, напишите сумму текстом (числом).")
+        return
+
+    amount_text = message.text.strip()
+
+    # Проверяем, что введено валидное число
+    try:
+        amount = float(amount_text)
+        if amount <= 0:
+            raise ValueError()
+    except ValueError:
+        await message.answer(
+            "❌ Пожалуйста, введите корректную сумму больше нуля (целое число или с точкой)."
+        )
+        return
+
+    await message.answer("🔄 <i>Генерирую ссылку для оплаты...</i>", parse_mode="HTML")
+
+    try:
+        # Делаем запрос к твоему готовому FastAPI эндпоинту от лица пользователя
+        response = await api_client.post(
+            "/api/v1/users/me/balance/top-up", state, json={"amount": amount}
+        )
+
+        if response.status_code == 200:
+            payment_data = response.json()
+            payment_url = payment_data.get("payment_url")
+            transaction_id = payment_data.get("transaction_id")
+
+            # Создаем клавиатуру с кнопкой-ссылкой (URL button)
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="💳 Оплатить через Stripe", url=payment_url
+                        )
+                    ]
+                ]
+            )
+
+            await message.answer(
+                f"✅ <b>Ссылка успешно создана!</b>\n\n"
+                f"💵 Сумма к оплате: <b>{amount:.2f} ₴</b>\n"
+                f"🆔 ID транзакции: <code>{transaction_id}</code>\n\n"
+                f"Нажмите кнопку ниже для перехода к безопасной оплате. "
+                f"После успешной оплаты баланс обновится автоматически.",
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+            # Сбрасываем состояние ввода суммы
+            await state.set_state(None)
+        else:
+            await message.answer(
+                f"❌ Не удалось создать платеж. Сервер вернул код: {response.status_code}"
+            )
+            await state.set_state(None)
+
+    except Exception as e:
+        await message.answer(f"❌ Ошибка при обращении к серверу: {str(e)}")
+        await state.set_state(None)

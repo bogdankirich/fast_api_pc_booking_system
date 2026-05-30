@@ -18,6 +18,7 @@ from app.schemas.transaction import (
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.services.payment import StripePayService
 from app.services.user import UserService
+from app.tasks.telegram_notifications import send_payment_success_notification
 
 router = APIRouter(prefix="/users", tags=["Users"])
 logger = logging.getLogger(__name__)
@@ -106,16 +107,21 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db_ses
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
-
         transaction_id = session.client_reference_id
 
         if not transaction_id:
             return {"status": "missing_reference"}
 
         transaction_repo = TransactionRepository(Transaction)
-        result_status = await transaction_repo.confirm_deposit_transaction(
-            db, transaction_id
-        )
+
+        (
+            result_status,
+            tg_id,
+            amount,
+        ) = await transaction_repo.confirm_deposit_transaction(db, transaction_id)
+
+        if result_status == "success" and tg_id:
+            send_payment_success_notification.delay(tg_id, amount)  # type: ignore
 
         return {"status": result_status}
 

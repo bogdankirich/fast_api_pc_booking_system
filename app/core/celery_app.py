@@ -11,6 +11,7 @@ celery_app = Celery(
         "app.tasks.bookings",
         "app.tasks.email",
         "app.tasks.telegram_notifications",
+        "app.tasks.transactions",
     ],
 )
 
@@ -22,6 +23,11 @@ celery_app.conf.beat_schedule = {
     "check-expired-bookings-every-minute": {
         "task": "check_expired_bookings",
         "schedule": crontab(minute="*"),
+    },
+    # <-- ДОБАВИЛИ НОВУЮ ЗАДАЧУ
+    "cleanup-pending-transactions-every-15-min": {
+        "task": "cleanup_pending_transactions",
+        "schedule": crontab(minute="*/15"),  # Запуск каждые 15 минут
     },
 }
 

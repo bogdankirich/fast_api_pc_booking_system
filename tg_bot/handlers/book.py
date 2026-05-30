@@ -5,7 +5,12 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from tg_bot.keyboards import get_main_menu
 
@@ -20,15 +25,27 @@ class BookStates(StatesGroup):
 
 @router.message(Command("book"))
 @router.message(F.text == "🖥 Забронировать ПК")
-async def cmd_book(message: Message, state: FSMContext):
+@router.callback_query(F.data == "start_booking")  #
+async def cmd_book(event: Message | CallbackQuery, state: FSMContext):
     user_data = await state.get_data()
     access_token = user_data.get("access_token")
 
-    if not access_token:
-        await message.answer(
-            "❌ Вы не авторизованы. Сначала выполните команду /login"
-        )
+    message = event if isinstance(event, Message) else event.message
+
+    if not isinstance(message, Message):
         return
+
+    if not access_token:
+        if isinstance(event, CallbackQuery):
+            await event.answer("❌ Вы не авторизованы!", show_alert=True)
+        else:
+            await message.answer(
+                "❌ Вы не авторизованы. Сначала выполните команду /login"
+            )
+        return
+
+    if isinstance(event, CallbackQuery):
+        await event.answer()
 
     async with httpx.AsyncClient() as client:
         try:
@@ -49,7 +66,8 @@ async def cmd_book(message: Message, state: FSMContext):
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
-                                text=zone["name"], callback_data=f"book_zone_{zone['id']}"
+                                text=zone["name"],
+                                callback_data=f"book_zone_{zone['id']}",
                             )
                         ]
                         for zone in zones
@@ -159,7 +177,8 @@ async def process_time(message: Message, state: FSMContext):
                     inline_keyboard=[
                         [
                             InlineKeyboardButton(
-                                text=f"ПК #{pc['id']}", callback_data=f"book_pc_{pc['id']}"
+                                text=f"ПК #{pc['id']}",
+                                callback_data=f"book_pc_{pc['id']}",
                             )
                         ]
                         for pc in pcs
