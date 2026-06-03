@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Sequence
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,14 +26,18 @@ class PCService:
         if not pc:
             return None
 
-        now_shifted = datetime.now(timezone.utc) + timedelta(hours=3)
+        now_local_naive = datetime.now(ZoneInfo("Europe/Kyiv")).replace(tzinfo=None)
         pc.status = "available"
 
         for booking in pc.bookings:
-            if (
-                booking.start_time <= now_shifted <= booking.end_time
-                and booking.status in ["active", "paid", "SUCCESS"]
-            ):
+            start_naive = booking.start_time.replace(tzinfo=None)
+            end_naive = booking.end_time.replace(tzinfo=None)
+
+            if start_naive <= now_local_naive <= end_naive and booking.status in [
+                "active",
+                "paid",
+                "SUCCESS",
+            ]:
                 pc.status = "occupied"
                 break
 
@@ -40,15 +45,19 @@ class PCService:
 
     async def get_pcs_by_zone(self, db: AsyncSession, zone_id: int) -> Sequence[PC]:
         pcs = await self.pc_repo.get_by_zone(db, zone_id=zone_id)
-        now_shifted = datetime.now(timezone.utc) + timedelta(hours=3)
+        now_local_naive = datetime.now(ZoneInfo("Europe/Kyiv")).replace(tzinfo=None)
 
         for pc in pcs:
             pc.status = "available"
             for booking in pc.bookings:
-                if (
-                    booking.start_time <= now_shifted <= booking.end_time
-                    and booking.status == "active"
-                ):
+                start_naive = booking.start_time.replace(tzinfo=None)
+                end_naive = booking.end_time.replace(tzinfo=None)
+
+                if start_naive <= now_local_naive <= end_naive and booking.status in [
+                    "active",
+                    "paid",
+                    "SUCCESS",
+                ]:
                     pc.status = "occupied"
                     break
 
