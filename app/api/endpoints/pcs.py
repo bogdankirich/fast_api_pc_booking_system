@@ -45,3 +45,17 @@ async def get_pcs_by_zone(
     pc_service: PCService = Depends(get_pc_service),
 ):
     return await pc_service.get_pcs_by_zone(db, zone_id=zone_id)
+
+
+@router.get("/{pc_id}", response_model=PCResponce)
+async def get_pc_by_id(
+    pc_id: int,
+    db: AsyncSession = Depends(get_db_session),
+    pc_service: PCService = Depends(get_pc_service),
+):
+    pc = await pc_service.get_pc(db, pc_id=pc_id)
+    if not pc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="PC not found"
+        )
+    return pc

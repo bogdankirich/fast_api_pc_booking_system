@@ -3,6 +3,7 @@ from typing import Sequence
 
 from sqlalchemy import and_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.bookings import Booking
 from app.models.pc import PC
@@ -14,8 +15,21 @@ class PCRepository(BaseRepository[PC, PCCreate]):
     def __init__(self) -> None:
         super().__init__(PC)
 
+    async def get_pc_with_bookings(self, db: AsyncSession, pc_id: int) -> PC | None:
+        query = (
+            select(self.model)
+            .where(self.model.id == pc_id)
+            .options(selectinload(self.model.bookings))
+        )
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
     async def get_by_zone(self, db: AsyncSession, *, zone_id: int) -> Sequence[PC]:
-        query = select(self.model).where(self.model.zone_id == zone_id)
+        query = (
+            select(self.model)
+            .where(self.model.zone_id == zone_id)
+            .options(selectinload(self.model.bookings))
+        )
         result = await db.execute(query)
         return result.scalars().all()
 
