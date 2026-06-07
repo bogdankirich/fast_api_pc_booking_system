@@ -1,0 +1,94 @@
+{% extends "sqladmin/layout.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h2>🎮 Live Карта Клуба</h2>
+    <p class="text-muted">Статусы и таймеры обновляются в реальном времени</p>
+    
+    <div class="row mt-4" id="pc-grid">
+        {% for pc in pcs %}
+        <div class="col-md-2 col-sm-4 mb-4">
+            <div class="card text-center text-white shadow-sm transition-all pc-card
+                        {% if pc.status == 'available' %}bg-success{% else %}bg-danger{% endif %}" 
+                 id="pc-{{ pc.id }}"
+                 data-end-time="{{ pc.end_time }}">
+                <div class="card-body">
+                    <h3 class="card-title"><i class="fa-solid fa-desktop"></i> {{ pc.id }}</h3>
+                    <span class="badge bg-dark mt-2 pc-status">{{ pc.status | upper }}</span>
+                    <div class="mt-2 font-monospace fw-bold pc-timer" style="font-size: 1.1rem; height: 1.5rem;">
+                        </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+    // --- 1. ЛОГИКА ТАЙМЕРОВ ---
+    function updateTimers() {
+        const cards = document.querySelectorAll(".pc-card");
+        const now = new Date();
+
+        cards.forEach(card => {
+            const endTimeStr = card.getAttribute("data-end-time");
+            const timerDiv = card.querySelector(".pc-timer");
+            const statusBadge = card.querySelector(".pc-status");
+
+            if (!endTimeStr) {
+                timerDiv.innerText = "СВОБОДЕН";
+                return;
+            }
+
+            const endTime = new Date(endTimeStr);
+            const diffSeconds = Math.floor((endTime - now) / 1000);
+
+            if (diffSeconds > 0) {
+                // Математика для часов, минут, секунд
+                const h = String(Math.floor(diffSeconds / 3600)).padStart(2, '0');
+                const m = String(Math.floor((diffSeconds % 3600) / 60)).padStart(2, '0');
+                const s = String(diffSeconds % 60).padStart(2, '0');
+                timerDiv.innerText = `${h}:${m}:${s}`;
+            } else {
+                // Если время вышло, но сокет еще не прислал сигнал
+                timerDiv.innerText = "00:00:00";
+            }
+        });
+    }
+
+    // Запускаем тиканье каждую секунду
+    setInterval(updateTimers, 1000);
+    updateTimers(); // Первый вызов сразу при загрузке
+
+    // --- 2. ЛОГИКА WEBSOCKETS ---
+    const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+    const wsUrl = wsProtocol + window.location.host + "/ws/admin/map";
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.type === "pc_status_update") {
+            const pcCard = document.getElementById("pc-" + data.pc_id);
+            
+            if (pcCard) {
+                const statusBadge = pcCard.querySelector(".pc-status");
+                statusBadge.innerText = data.status.toUpperCase();
+                
+                // Обновляем скрытый атрибут для таймера
+                pcCard.setAttribute("data-end-time", data.end_time);
+                
+                if (data.status === "available") {
+                    pcCard.classList.remove("bg-danger");
+                    pcCard.classList.add("bg-success");
+                } else {
+                    pcCard.classList.remove("bg-success");
+                    pcCard.classList.add("bg-danger");
+                }
+                
+                // Принудительно обновляем текст сразу при получении пакета
+                updateTimers(); 
+            }
+        }
+    };
+</script>
+{% endblock %}

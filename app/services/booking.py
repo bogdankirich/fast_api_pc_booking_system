@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.websockets import manager
 from app.models.bookings import Booking
 from app.models.transactions import Transaction, TransactionStatus, TransactionType
 from app.models.user import User
@@ -104,7 +105,11 @@ class BookingService:
                     },
                     countdown=countdown_seconds,
                 )
+        end_time_iso = db_obj.end_time.replace(tzinfo=None).isoformat()
 
+        await manager.broadcast_pc_update(
+            pc_id=db_obj.pc_id, status="occupied", end_time=end_time_iso
+        )
         return db_obj
 
     async def cancel_booking(
@@ -119,4 +124,7 @@ class BookingService:
             return True
 
         await self.booking_repo.cancel_booking(db, booking)
+        await manager.broadcast_pc_update(
+            pc_id=booking.pc_id, status="available", end_time=""
+        )
         return True
