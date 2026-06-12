@@ -68,3 +68,23 @@ class UserService:
         await db.commit()
         await db.refresh(db_user)
         return db_user
+
+    async def get_or_create_guest_user(self, db: AsyncSession) -> User:
+        guest_email = "guest@club.local"
+        user = await self.user_repo.get_by_email(db, email=guest_email)
+        if user:
+            return user
+
+        user_data = {
+            "email": guest_email,
+            "auth_provider": "system",
+            "hashed_password": None,
+            "role": "guest",
+            "balance": 0,
+        }
+
+        db_obj = User(**user_data)
+        db.add(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
+        return db_obj

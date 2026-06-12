@@ -6,6 +6,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.admin.auth_admin import AdminAuth
 from app.admin.views import BookingAdmin, LiveMapView, PCAdmin, UserAdmin
 from app.api.endpoints import auth, bookings, pcs, users, websockets, zones
+from app.api.endpoints.websockets import router as websockets_router
 from app.core.config import settings
 from app.db.database import engine
 
@@ -45,3 +46,4 @@ admin.add_view(UserAdmin)
 admin.add_view(PCAdmin)
 admin.add_view(BookingAdmin)
 admin.add_view(LiveMapView)
+app.include_router(websockets_router)

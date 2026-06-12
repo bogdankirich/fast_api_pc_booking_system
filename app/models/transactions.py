@@ -18,6 +18,7 @@ class TransactionStatus(str, enum.Enum):
 class TransactionType(str, enum.Enum):
     DEPOSIT = "deposit"
     WITHDRAWAL = "withdrawal"
+    CASH = "cash"
 
 
 class Transaction(Base):

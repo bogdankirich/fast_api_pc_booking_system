@@ -1,13 +1,33 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.dependencies import get_booking_service, get_current_user
 from app.db.database import get_db_session
+from app.models.bookings import Booking
 from app.models.user import User
 from app.schemas.booking import BookingCreate, BookingResponce
 from app.services.booking import BookingService
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
+
+
+# --- СХЕМЫ ДЛЯ АДМИНСКИХ ЗАПРОСОВ ---
+
+
+class AdminCashBookingRequest(BaseModel):
+    pc_id: int
+    hours: int
+
+
+class AdminEndSessionRequest(BaseModel):
+    pc_id: int
+
+
+# --- КЛИЕНТСКИЕ ЭНДПОИНТЫ ---
 
 
 @router.post("/", response_model=BookingResponce, status_code=status.HTTP_201_CREATED)
@@ -55,3 +75,60 @@ async def cancel_booking(
             )
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+# --- АДМИНСКИЕ ЭНДПОИНТЫ (РУЧНАЯ КАССА) ---
+
+
+@router.post("/admin/cash-booking", status_code=status.HTTP_201_CREATED)
+async def admin_cash_booking(
+    payload: AdminCashBookingRequest,
+    db: AsyncSession = Depends(get_db_session),
+    booking_service: BookingService = Depends(get_booking_service),
+):
+    # Сервер железобетонно генерирует чистое UTC время
+    now_utc = datetime.now(timezone.utc)
+    end_utc = now_utc + timedelta(hours=payload.hours)
+
+    booking_in = BookingCreate(
+        pc_id=payload.pc_id, start_time=now_utc, end_time=end_utc
+    )
+    try:
+        booking = await booking_service.create_cash_booking(db, booking_in=booking_in)
+        return {"status": "success", "booking_id": booking.id}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/admin/end-session")
+async def admin_end_session(
+    payload: AdminEndSessionRequest,
+    db: AsyncSession = Depends(get_db_session),
+    booking_service: BookingService = Depends(get_booking_service),
+):
+    # 1. Ищем активную бронь на этом ПК
+    stmt = (
+        select(Booking)
+        .where(Booking.pc_id == payload.pc_id, Booking.status == "active")
+        .order_by(Booking.id.desc())
+    )
+
+    result = await db.execute(stmt)
+    active_booking = result.scalars().first()
+
+    if not active_booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Активная сессия для этого ПК не найдена",
+        )
+
+    # Эмулируем админа для прохождения внутренних проверок прав в сервисе
+    mock_admin = User(role="admin", id=active_booking.user_id)
+
+    try:
+        await booking_service.cancel_booking(
+            db, booking_id=active_booking.id, current_user=mock_admin
+        )
+        return {"status": "success", "message": f"Сессия {active_booking.id} завершена"}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

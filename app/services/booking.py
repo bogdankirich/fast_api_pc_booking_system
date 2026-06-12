@@ -10,8 +10,10 @@ from app.models.transactions import Transaction, TransactionStatus, TransactionT
 from app.models.user import User
 from app.repositories.booking import BookingRepository
 from app.repositories.pc import PCRepository
+from app.repositories.user import UserRepository
 from app.repositories.zone import ZoneRepository
 from app.schemas.booking import BookingCreate
+from app.services.user import UserService
 from app.tasks.email import send_receipt
 from app.tasks.telegram_notifications import send_booking_reminder
 
@@ -128,3 +130,61 @@ class BookingService:
             pc_id=booking.pc_id, status="available", end_time=""
         )
         return True
+
+    async def create_cash_booking(
+        self, db: AsyncSession, booking_in: BookingCreate
+    ) -> Booking:
+
+        if booking_in.start_time >= booking_in.end_time:
+            raise ValueError("Конечное время должно быть позже начального")
+
+        pc = await self.pc_repo.get_with_lock(db, id=booking_in.pc_id)
+        if not pc:
+            raise ValueError("Компьютер не найден")
+
+        is_busy = await self.booking_repo.check_overlap(
+            db,
+            pc_id=booking_in.pc_id,
+            start_time=booking_in.start_time,
+            end_time=booking_in.end_time,
+        )
+        if is_busy:
+            raise ValueError("Этот ПК уже забронирован на выбранное время")
+
+        zone = await self.zone_repo.get(db, id=pc.zone_id)
+        if not zone:
+            raise ValueError("Зона для этого ПК не найдена")
+
+        duration_seconds = (booking_in.end_time - booking_in.start_time).total_seconds()
+        duration_hours = Decimal(str(duration_seconds / 3600))
+        total_cost = round(duration_hours * zone.hourly_rate, 2)
+
+        user_service = UserService(UserRepository())
+        guest_user = await user_service.get_or_create_guest_user(db)
+
+        booking_data = booking_in.model_dump()
+        booking_data["user_id"] = guest_user.id
+        booking_data["total_cost"] = total_cost
+        booking_data["status"] = "active"
+
+        db_obj = Booking(**booking_data)
+        db.add(db_obj)
+
+        cash_tx = Transaction(
+            user_id=guest_user.id,
+            amount=total_cost,
+            status=TransactionStatus.SUCCESS,
+            type=TransactionType.CASH,
+        )
+
+        db.add(cash_tx)
+        await db.commit()
+        await db.refresh(db_obj)
+
+        end_time_iso = db_obj.end_time.isoformat()
+
+        await manager.broadcast_pc_update(
+            pc_id=db_obj.pc_id, status="occupied", end_time=end_time_iso
+        )
+
+        return db_obj

@@ -15,8 +15,16 @@
                 <div class="card-body">
                     <h3 class="card-title"><i class="fa-solid fa-desktop"></i> {{ pc.id }}</h3>
                     <span class="badge bg-dark mt-2 pc-status">{{ pc.status | upper }}</span>
+                    
                     <div class="mt-2 font-monospace fw-bold pc-timer" style="font-size: 1.1rem; height: 1.5rem;">
                         </div>
+
+                    {% if pc.next_booking %}
+                    <div class="mt-1 text-warning fw-bold" style="font-size: 0.85rem;" data-next-booking="{{ pc.next_booking }}">
+                        </div>
+                    {% else %}
+                    <div class="mt-1" style="height: 0.85rem;"></div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -24,71 +32,221 @@
     </div>
 </div>
 
+<div class="offcanvas offcanvas-end shadow" tabindex="-1" id="bookingOffcanvas" aria-labelledby="bookingOffcanvasLabel">
+    <div class="offcanvas-header border-bottom">
+        <h5 class="offcanvas-title" id="bookingOffcanvasLabel">
+            🖥️ Касса: ПК #<span id="offcanvasPcIdDisplay"></span>
+        </h5>
+        <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Закрыть"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="alert alert-danger d-none" id="bookingErrorAlert"></div>
+
+        <div id="actionCreateBooking" class="d-none">
+            <form id="cashBookingForm">
+                <input type="hidden" id="offcanvasPcIdInput" name="pc_id">
+                
+                <div class="mb-4">
+                    <label class="form-label text-muted">Длительность сеанса</label>
+                    <select class="form-select" id="durationSelect" required>
+                        <option value="1">1 час (Стандарт)</option>
+                        <option value="2">2 часа</option>
+                        <option value="3">3 часа</option>
+                        <option value="5">Пакет 5 часов</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-success w-100 mt-2" id="submitBookingBtn">
+                    <i class="fa-solid fa-money-bill-wave"></i> Оплатить наличными
+                </button>
+            </form>
+        </div>
+
+        <div id="actionManageBooking" class="d-none">
+            <p class="text-muted mb-4">Этот компьютер сейчас используется гостем клуба.</p>
+            
+            <button type="button" class="btn btn-danger w-100" id="endSessionBtn">
+                <i class="fa-solid fa-stop"></i> Завершить сеанс досрочно
+            </button>
+        </div>
+    </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
-    // --- 1. ЛОГИКА ТАЙМЕРОВ ---
+    // --- 1. ЛОГИКА ТАЙМЕРОВ (остается без изменений) ---
     function updateTimers() {
         const cards = document.querySelectorAll(".pc-card");
         const now = new Date();
-
         cards.forEach(card => {
             const endTimeStr = card.getAttribute("data-end-time");
             const timerDiv = card.querySelector(".pc-timer");
-            const statusBadge = card.querySelector(".pc-status");
-
-            if (!endTimeStr) {
-                timerDiv.innerText = "СВОБОДЕН";
-                return;
-            }
-
+            if (!endTimeStr) { timerDiv.innerText = "СВОБОДЕН"; return; }
             const endTime = new Date(endTimeStr);
             const diffSeconds = Math.floor((endTime - now) / 1000);
-
             if (diffSeconds > 0) {
-                // Математика для часов, минут, секунд
                 const h = String(Math.floor(diffSeconds / 3600)).padStart(2, '0');
                 const m = String(Math.floor((diffSeconds % 3600) / 60)).padStart(2, '0');
                 const s = String(diffSeconds % 60).padStart(2, '0');
                 timerDiv.innerText = `${h}:${m}:${s}`;
             } else {
-                // Если время вышло, но сокет еще не прислал сигнал
                 timerDiv.innerText = "00:00:00";
             }
         });
     }
-
-    // Запускаем тиканье каждую секунду
     setInterval(updateTimers, 1000);
-    updateTimers(); // Первый вызов сразу при загрузке
+    updateTimers();
 
-    // --- 2. ЛОГИКА WEBSOCKETS ---
-    const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
-    const wsUrl = wsProtocol + window.location.host + "/ws/admin/map";
-    const ws = new WebSocket(wsUrl);
-
-    ws.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        if (data.type === "pc_status_update") {
-            const pcCard = document.getElementById("pc-" + data.pc_id);
-            
-            if (pcCard) {
-                const statusBadge = pcCard.querySelector(".pc-status");
-                statusBadge.innerText = data.status.toUpperCase();
-                
-                // Обновляем скрытый атрибут для таймера
-                pcCard.setAttribute("data-end-time", data.end_time);
-                
-                if (data.status === "available") {
-                    pcCard.classList.remove("bg-danger");
-                    pcCard.classList.add("bg-success");
-                } else {
-                    pcCard.classList.remove("bg-success");
-                    pcCard.classList.add("bg-danger");
-                }
-                
-                // Принудительно обновляем текст сразу при получении пакета
-                updateTimers(); 
+    function updateNextBookings() {
+        document.querySelectorAll('[data-next-booking]').forEach(el => {
+            const isoString = el.getAttribute('data-next-booking');
+            if (isoString) {
+                const date = new Date(isoString); // Автоматический перевод из UTC в локальное
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                el.innerHTML = `<i class="fa-solid fa-clock"></i> Бронь на ${hours}:${minutes}`;
             }
+        });
+    }
+    
+    // Вызываем один раз при загрузке страницы
+    updateNextBookings();
+
+    // --- 2. ЛОГИКА WEBSOCKETS (остается без изменений) ---
+    try {
+        const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+        const wsUrl = wsProtocol + window.location.host + "/ws/admin/map";
+        const ws = new WebSocket(wsUrl);
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.type === "pc_status_update") {
+                const pcCard = document.getElementById("pc-" + data.pc_id);
+                if (pcCard) {
+                    const statusBadge = pcCard.querySelector(".pc-status");
+                    statusBadge.innerText = data.status.toUpperCase();
+                    pcCard.setAttribute("data-end-time", data.end_time);
+                    if (data.status === "available") {
+                        pcCard.classList.remove("bg-danger");
+                        pcCard.classList.add("bg-success");
+                    } else {
+                        pcCard.classList.remove("bg-success");
+                        pcCard.classList.add("bg-danger");
+                    }
+                    updateTimers(); 
+                }
+            }
+        };
+    } catch (e) {
+        console.error("Ошибка WebSockets:", e);
+    }
+
+    // --- 3. ЛОГИКА РУЧНОЙ КАССЫ (ОБНОВЛЕННАЯ) ---
+    
+const actionCreate = document.getElementById('actionCreateBooking');
+    const actionManage = document.getElementById('actionManageBooking');
+    const offcanvasElement = document.getElementById('bookingOffcanvas');
+    const bookingOffcanvas = new bootstrap.Offcanvas(offcanvasElement);
+
+    // Слушатель клика по сетке ПК
+    document.getElementById('pc-grid').addEventListener('click', function(e) {
+        const card = e.target.closest('.pc-card');
+        if (!card) return;
+
+        const pcId = card.id.split('-')[1];
+        const status = card.querySelector('.pc-status').innerText.toLowerCase();
+        
+        // Базовая настройка шапки панели
+        document.getElementById('offcanvasPcIdDisplay').innerText = pcId;
+        document.getElementById('offcanvasPcIdInput').value = pcId;
+        document.getElementById('bookingErrorAlert').classList.add('d-none');
+        
+        // ВЕТВЛЕНИЕ: Переключаем интерфейс в зависимости от цвета карточки
+        if (status === 'available') {
+            // Если ПК свободен — показываем форму оплаты, прячем кнопку отмены
+            actionCreate.classList.remove('d-none');
+            actionManage.classList.add('d-none');
+        } else {
+            // If ПК занят — прячем форму оплаты, показываем кнопку завершения сессии
+            actionCreate.classList.add('d-none');
+            actionManage.classList.remove('d-none');
         }
-    };
+        
+        bookingOffcanvas.show();
+    });
+
+    // Обработчик для КРАСНОЙ КНОПКИ "Завершить сеанс досрочно"
+    document.getElementById('endSessionBtn').addEventListener('click', async function() {
+        if (!confirm('Вы уверены, что хотите принудительно завершить сессию на этом ПК?')) return;
+        
+        const pcId = parseInt(document.getElementById('offcanvasPcIdInput').value);
+        const btn = document.getElementById('endSessionBtn');
+        const errorAlert = document.getElementById('bookingErrorAlert');
+        
+        btn.disabled = true;
+        btn.innerHTML = 'Завершение...';
+        errorAlert.classList.add('d-none');
+
+        try {
+            const response = await fetch('/api/v1/bookings/admin/end-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pc_id: pcId })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Не удалось завершить сессию');
+
+            // Закрываем панель. Вебсокет поймает cancel_booking из сервиса и сам перекрасит ПК в зеленый!
+            bookingOffcanvas.hide();
+
+        } catch (err) {
+            errorAlert.innerText = err.message;
+            errorAlert.classList.remove('d-none');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-stop"></i> Завершить сеанс досрочно';
+        }
+    });
+    document.getElementById('cashBookingForm').addEventListener('submit', async function(e) {
+        e.preventDefault(); // Останавливаем перезагрузку страницы
+        
+        const btn = document.getElementById('submitBookingBtn');
+        const errorAlert = document.getElementById('bookingErrorAlert');
+        const pcId = parseInt(document.getElementById('offcanvasPcIdInput').value);
+        const hours = parseInt(document.getElementById('durationSelect').value);
+        
+        btn.disabled = true;
+        btn.innerHTML = 'Оформление...';
+        errorAlert.classList.add('d-none');
+
+        try {
+            // ВАЖНО: Убедись, что путь правильный (с префиксом /bookings)
+            const response = await fetch('/api/v1/bookings/admin/cash-booking', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pc_id: pcId,
+                    hours: hours
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Ошибка при бронировании');
+            }
+
+            // Закрываем панель при успехе (вебсокет сам всё перекрасит)
+            bookingOffcanvas.hide();
+
+        } catch (err) {
+            errorAlert.innerText = err.message;
+            errorAlert.classList.remove('d-none');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-money-bill-wave"></i> Оплатить наличными';
+        }
+    });
 </script>
 {% endblock %}

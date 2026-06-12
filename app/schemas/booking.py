@@ -11,11 +11,13 @@ class BookingBase(BaseModel):
 
 class BookingCreate(BookingBase):
     pc_id: int
+    # Эти поля наследуются, дублировать необязательно, но если есть — пусть будут
     start_time: datetime
     end_time: datetime
 
     @model_validator(mode="after")
     def validate_times(self) -> "BookingCreate":
+        # Возвращаем строгую проверку по UTC
         now = datetime.now(timezone.utc)
 
         if self.start_time < now - timedelta(minutes=1):

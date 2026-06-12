@@ -1,5 +1,4 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
 from sqladmin import BaseView, ModelView, expose
 from sqlalchemy import select
@@ -46,7 +45,8 @@ class LiveMapView(BaseView):
 
     @expose("/live-map", methods=["GET"])
     async def live_map_page(self, request: Request):
-        now_local = datetime.now(ZoneInfo("Europe/Kyiv")).replace(tzinfo=None)
+        # Используем чистое UTC, так как в базе теперь всё в UTC!
+        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
 
         async with async_session_maker() as db:
             result = await db.execute(
@@ -58,21 +58,35 @@ class LiveMapView(BaseView):
             for pc in pcs_db:
                 status = "available"
                 end_time_str = ""
+                next_booking_time = ""  # <-- Новая переменная для будущей брони
+
                 for b in pc.bookings:
+                    # Игнорируем отмененные
+                    if b.status not in ["active", "paid", "SUCCESS"]:
+                        continue
+
                     start_naive = b.start_time.replace(tzinfo=None)
                     end_naive = b.end_time.replace(tzinfo=None)
 
-                    if start_naive <= now_local <= end_naive and b.status in [
-                        "active",
-                        "paid",
-                        "SUCCESS",
-                    ]:
+                    # 1. Если кто-то играет ПРЯМО СЕЙЧАС
+                    if start_naive <= now_utc <= end_naive:
                         status = "occupied"
-                        end_time_str = end_naive.isoformat()
-                        break
+                        # Переводим UTC в ISO, чтобы таймер в JS отработал правильно
+                        end_time_str = b.end_time.isoformat()
+
+                    # 2. Если бронь В БУДУЩЕМ (комп сейчас свободен)
+                    elif start_naive > now_utc:
+                        # Запоминаем время начала (форматируем для админа)
+                        # Можно перевести в локальное время для вывода, но для простоты отдадим ISO
+                        next_booking_time = b.start_time.isoformat()
 
                 pcs_data.append(
-                    {"id": pc.id, "status": status, "end_time": end_time_str}
+                    {
+                        "id": pc.id,
+                        "status": status,
+                        "end_time": end_time_str,
+                        "next_booking": next_booking_time,  # <-- Прокидываем в шаблон
+                    }
                 )
 
         return await self.templates.TemplateResponse(
