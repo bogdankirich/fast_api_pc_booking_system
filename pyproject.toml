@@ -6,3 +6,8 @@ filterwarnings = [
     "ignore::DeprecationWarning"
 ]
 addopts = "--cov=app --cov-report=term-missing"
+markers = [
+    "smoke: critical happy-path tests for quick validation",
+    "integration: tests that use API endpoints and database",
+    "unit: isolated unit tests without external dependencies"
+]
