@@ -349,7 +349,7 @@ tests/
 |--------|----------|-------|
 | `app/services/booking.py` | 97% | 22 unit tests |
 | `app/api/endpoints/bookings.py` | 73% | 15 integration tests |
-| **Overall Project** | 61% | 37 tests total |
+| **Overall Project** | 70% | 99 tests total |
 
 ---
 
@@ -728,7 +728,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📬 Contact & Support
 
-**Bohdan Kirichenko** — Full-Stack Python Developer
+**Bohdan Kirichenko** — Backend Python Developer
 
 - 📧 Email: [bogdankirich1337@gmail.com](mailto:bogdankirich1337@gmail.com)
 - 💼 LinkedIn: [Bogdan Kirichenko](https://www.linkedin.com/in/bogdan-kirichenko-a8486b333/)
