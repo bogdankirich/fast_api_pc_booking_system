@@ -18,12 +18,22 @@ app = FastAPI(
 
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
+origins = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins="*",
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=[
+        "Content-Type",
+        "Set-Cookie",
+        "Authorization",
+        "Access-Control-Allow-Origin",
+    ],
 )
 
 app.include_router(users.router, prefix="/api/v1")

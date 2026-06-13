@@ -188,3 +188,18 @@ class BookingService:
         )
 
         return db_obj
+
+    async def admin_cancel_pc_session(
+        self, db: AsyncSession, pc_id: int, admin_user: User
+    ):
+
+        active_booking = await self.booking_repo.get_active_booking_by_pc(db, pc_id)
+
+        if not active_booking:
+            raise ValueError(f"Активная сессия для ПК {pc_id} не найдена")
+
+        await self.cancel_booking(
+            db, booking_id=active_booking.id, current_user=admin_user
+        )
+
+        return active_booking

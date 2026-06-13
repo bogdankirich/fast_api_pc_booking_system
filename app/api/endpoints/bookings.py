@@ -2,12 +2,14 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies.dependencies import get_booking_service, get_current_user
+from app.api.dependencies.dependencies import (
+    get_admin_user_hybrid,
+    get_booking_service,
+    get_current_user,
+)
 from app.db.database import get_db_session
-from app.models.bookings import Booking
 from app.models.user import User
 from app.schemas.booking import BookingCreate, BookingResponce
 from app.services.booking import BookingService
@@ -85,8 +87,8 @@ async def admin_cash_booking(
     payload: AdminCashBookingRequest,
     db: AsyncSession = Depends(get_db_session),
     booking_service: BookingService = Depends(get_booking_service),
+    current_admin: User = Depends(get_admin_user_hybrid),
 ):
-    # Сервер железобетонно генерирует чистое UTC время
     now_utc = datetime.now(timezone.utc)
     end_utc = now_utc + timedelta(hours=payload.hours)
 
@@ -105,30 +107,12 @@ async def admin_end_session(
     payload: AdminEndSessionRequest,
     db: AsyncSession = Depends(get_db_session),
     booking_service: BookingService = Depends(get_booking_service),
+    current_admin: User = Depends(get_admin_user_hybrid),
 ):
-    # 1. Ищем активную бронь на этом ПК
-    stmt = (
-        select(Booking)
-        .where(Booking.pc_id == payload.pc_id, Booking.status == "active")
-        .order_by(Booking.id.desc())
-    )
-
-    result = await db.execute(stmt)
-    active_booking = result.scalars().first()
-
-    if not active_booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Активная сессия для этого ПК не найдена",
-        )
-
-    # Эмулируем админа для прохождения внутренних проверок прав в сервисе
-    mock_admin = User(role="admin", id=active_booking.user_id)
-
     try:
-        await booking_service.cancel_booking(
-            db, booking_id=active_booking.id, current_user=mock_admin
+        booking = await booking_service.admin_cancel_pc_session(
+            db, pc_id=payload.pc_id, admin_user=current_admin
         )
-        return {"status": "success", "message": f"Сессия {active_booking.id} завершена"}
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        return {"status": "success", "message": f"Сессия {booking.id} завершена"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

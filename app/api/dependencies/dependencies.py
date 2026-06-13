@@ -1,5 +1,5 @@
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,7 @@ from app.services.pc import PCService
 from app.services.user import UserService
 from app.services.zone import ZoneService
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/login", auto_error=False)
 
 
 def get_zone_repository() -> ZoneRepository:
@@ -97,3 +97,54 @@ def get_current_admin_user(current_user: User = Depends(get_current_user)) -> Us
             detail="Insufficient rights. Administrator role required.",
         )
     return current_user
+
+
+async def get_admin_user_hybrid(
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    token: str = Depends(oauth2_scheme),
+    user_service: UserService = Depends(get_user_service),  # Используем твой инжектор!
+) -> User:
+    # --- ПУТЬ 1: Проверяем cookie-сессию от sqladmin (Браузер) ---
+
+    session_token = request.session.get("token")
+    print(f"DEBUG: Session token is -> {session_token}")
+    print(f"DEBUG: JWT token is -> {token}")
+    # =======================
+
+    if session_token:
+        user = await user_service.get_user(db, user_id=int(session_token))
+        if user and user.role == "admin":
+            return user
+        else:
+            print(f"DEBUG: User found: {user}, Role: {getattr(user, 'role', 'None')}")
+
+    session_token = request.session.get("token")
+    if session_token:
+        # В сессии sqladmin мы сохраняли ID, ищем по нему (замени метод, если у тебя он называется иначе)
+        user = await user_service.get_user(db, user_id=int(session_token))
+        if user and user.role == "admin":
+            return user
+
+    # --- ПУТЬ 2: Проверяем JWT токен от бота (если куки нет, но есть токен) ---
+    if token:
+        try:
+            payload = jwt.decode(
+                token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+            )
+            email = payload.get(
+                "sub"
+            )  # ИСПРАВЛЕНО: Достаем email, как в твоем get_current_user
+
+            if email:
+                user = await user_service.user_repo.get_by_email(db, email=email)
+                if user and user.role == "admin":
+                    return user
+        except jwt.PyJWTError:
+            pass  # Токен кривой или просрочен — игнорируем, ошибка выдастся ниже
+
+    # --- ЕСЛИ ОБА ПУТИ НЕ СРАБОТАЛИ ---
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Не авторизован. Отсутствует сессия администратора или неверный токен.",
+    )

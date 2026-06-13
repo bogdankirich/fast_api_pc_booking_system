@@ -148,7 +148,7 @@ const actionCreate = document.getElementById('actionCreateBooking');
     const offcanvasElement = document.getElementById('bookingOffcanvas');
     const bookingOffcanvas = new bootstrap.Offcanvas(offcanvasElement);
 
-    // Слушатель клика по сетке ПК
+   
     document.getElementById('pc-grid').addEventListener('click', function(e) {
         const card = e.target.closest('.pc-card');
         if (!card) return;
@@ -156,18 +156,18 @@ const actionCreate = document.getElementById('actionCreateBooking');
         const pcId = card.id.split('-')[1];
         const status = card.querySelector('.pc-status').innerText.toLowerCase();
         
-        // Базовая настройка шапки панели
+        
         document.getElementById('offcanvasPcIdDisplay').innerText = pcId;
         document.getElementById('offcanvasPcIdInput').value = pcId;
         document.getElementById('bookingErrorAlert').classList.add('d-none');
         
-        // ВЕТВЛЕНИЕ: Переключаем интерфейс в зависимости от цвета карточки
+        
         if (status === 'available') {
-            // Если ПК свободен — показываем форму оплаты, прячем кнопку отмены
+           
             actionCreate.classList.remove('d-none');
             actionManage.classList.add('d-none');
         } else {
-            // If ПК занят — прячем форму оплаты, показываем кнопку завершения сессии
+            
             actionCreate.classList.add('d-none');
             actionManage.classList.remove('d-none');
         }
@@ -175,7 +175,7 @@ const actionCreate = document.getElementById('actionCreateBooking');
         bookingOffcanvas.show();
     });
 
-    // Обработчик для КРАСНОЙ КНОПКИ "Завершить сеанс досрочно"
+    
     document.getElementById('endSessionBtn').addEventListener('click', async function() {
         if (!confirm('Вы уверены, что хотите принудительно завершить сессию на этом ПК?')) return;
         
@@ -191,13 +191,14 @@ const actionCreate = document.getElementById('actionCreateBooking');
             const response = await fetch('/api/v1/bookings/admin/end-session', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({ pc_id: pcId })
             });
 
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Не удалось завершить сессию');
 
-            // Закрываем панель. Вебсокет поймает cancel_booking из сервиса и сам перекрасит ПК в зеленый!
+            
             bookingOffcanvas.hide();
 
         } catch (err) {
@@ -221,10 +222,11 @@ const actionCreate = document.getElementById('actionCreateBooking');
         errorAlert.classList.add('d-none');
 
         try {
-            // ВАЖНО: Убедись, что путь правильный (с префиксом /bookings)
+            
             const response = await fetch('/api/v1/bookings/admin/cash-booking', { 
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify({
                     pc_id: pcId,
                     hours: hours
@@ -237,7 +239,7 @@ const actionCreate = document.getElementById('actionCreateBooking');
                 throw new Error(data.detail || 'Ошибка при бронировании');
             }
 
-            // Закрываем панель при успехе (вебсокет сам всё перекрасит)
+            
             bookingOffcanvas.hide();
 
         } catch (err) {

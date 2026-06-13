@@ -43,3 +43,14 @@ class BookingRepository(BaseRepository[Booking, BookingCreate]):
         await db.commit()
         await db.refresh(booking)
         return booking
+
+    async def get_active_booking_by_pc(
+        self, db: AsyncSession, pc_id: int
+    ) -> Booking | None:
+        stmt = (
+            select(self.model)
+            .where(self.model.pc_id == pc_id, self.model.status == "active")
+            .order_by(self.model.id.desc())
+        )
+        result = await db.execute(stmt)
+        return result.scalars().first()
