@@ -349,7 +349,7 @@ tests/
 |--------|----------|-------|
 | `app/services/booking.py` | 97% | 22 unit tests |
 | `app/api/endpoints/bookings.py` | 73% | 15 integration tests |
-| **Overall Project** | 61% | 37 tests total |
+| **Overall Project** | 70% | 99 tests total |
 
 ---
 
