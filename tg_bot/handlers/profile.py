@@ -1,4 +1,5 @@
 from aiogram import F, Router
+from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
@@ -19,6 +20,11 @@ class TopUpStates(StatesGroup):
     waiting_for_amount = State()
 
 
+# --- ФАБРИКА КНОПОК ПРОФИЛЯ ---
+class ProfileCallback(CallbackData, prefix="profile"):
+    action: str  # 'topup' или 'logout'
+
+
 @router.message(F.text == "⚙️ Настройки профиля")
 async def cmd_profile(message: Message, state: FSMContext):
     user_data = await state.get_data()
@@ -27,12 +33,12 @@ async def cmd_profile(message: Message, state: FSMContext):
         return
 
     try:
-        response = await api_client.get("/api/v1/users/me", state)
+        # Явно указываем state=state
+        response = await api_client.get("/api/v1/users/me", state=state)
 
         if response.status_code == 200:
             user_info = response.json()
             email = user_info.get("email", "Не указан")
-
             role = user_info.get("role")
             is_admin = role == "admin"
 
@@ -50,14 +56,21 @@ async def cmd_profile(message: Message, state: FSMContext):
                 f"💰 Баланс: {balance:.2f} ₴"
             )
 
+            # Используем фабрику кнопок вместо сырых строк
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
                         InlineKeyboardButton(
-                            text="💳 Пополнить баланс", callback_data="topup"
+                            text="💳 Пополнить баланс",
+                            callback_data=ProfileCallback(action="topup").pack(),
                         )
                     ],
-                    [InlineKeyboardButton(text="🚪 Выйти", callback_data="logout")],
+                    [
+                        InlineKeyboardButton(
+                            text="🚪 Выйти",
+                            callback_data=ProfileCallback(action="logout").pack(),
+                        )
+                    ],
                 ]
             )
 
@@ -69,54 +82,50 @@ async def cmd_profile(message: Message, state: FSMContext):
         await message.answer(f"❌ Ошибка: {str(e)}")
 
 
-@router.callback_query(F.data == "logout")
+@router.callback_query(ProfileCallback.filter(F.action == "logout"))
 async def callback_logout(callback: CallbackQuery, state: FSMContext):
+    # Страховка для линтера
+    if not isinstance(callback.message, Message):
+        return
 
+    # При логауте нам действительно нужно удалить всё, включая токены
     await state.clear()
 
-    if isinstance(callback.message, Message):
-        await callback.message.edit_text("🚪 Вы успешно вышли из аккаунта")
-        await callback.message.answer(
-            "Для входа нажмите кнопку ниже:", reply_markup=get_start_menu()
-        )
-    else:
-        await callback.answer("Вы вышли из системы")
-
+    await callback.message.edit_text("🚪 Вы успешно вышли из аккаунта")
+    await callback.message.answer(
+        "Для входа нажмите кнопку ниже:", reply_markup=get_start_menu()
+    )
     await callback.answer()
 
 
-@router.callback_query(F.data == "topup")
+@router.callback_query(ProfileCallback.filter(F.action == "topup"))
 async def callback_topup(callback: CallbackQuery, state: FSMContext):
-    """
-    Ловим нажатие кнопки 'Пополнить баланс' и просим ввести сумму.
-    """
+    if not isinstance(callback.message, Message):
+        return
+
     user_data = await state.get_data()
     if not user_data.get("access_token"):
         await callback.answer(
             "❌ Сессия истекла. Пожалуйста, авторизуйтесь заново.", show_alert=True
         )
         return
-    if isinstance(callback.message, Message):
-        await callback.message.answer(
-            "💳 <b>Введите сумму пополнения в гривнах:</b>\n<i>(Например: 100, 250, 500)</i>",
-            parse_mode="HTML",
-        )
-        await state.set_state(TopUpStates.waiting_for_amount)
+
+    await callback.message.answer(
+        "💳 <b>Введите сумму пополнения в гривнах:</b>\n<i>(Например: 100, 250, 500)</i>",
+        parse_mode="HTML",
+    )
+    await state.set_state(TopUpStates.waiting_for_amount)
     await callback.answer()
 
 
 @router.message(TopUpStates.waiting_for_amount)
 async def process_topup_amount(message: Message, state: FSMContext):
-    """
-    Принимаем сумму, делаем запрос к FastAPI и возвращаем инлайн-кнопку со ссылкой на Stripe.
-    """
     if not message.text:
         await message.answer("❌ Пожалуйста, напишите сумму текстом (числом).")
         return
 
     amount_text = message.text.strip()
 
-    # Проверяем, что введено валидное число
     try:
         amount = float(amount_text)
         if amount <= 0:
@@ -130,9 +139,8 @@ async def process_topup_amount(message: Message, state: FSMContext):
     await message.answer("🔄 <i>Генерирую ссылку для оплаты...</i>", parse_mode="HTML")
 
     try:
-        # Делаем запрос к твоему готовому FastAPI эндпоинту от лица пользователя
         response = await api_client.post(
-            "/api/v1/users/me/balance/top-up", state, json={"amount": amount}
+            "/api/v1/users/me/balance/top-up", state=state, json={"amount": amount}
         )
 
         if response.status_code == 200:
@@ -140,7 +148,7 @@ async def process_topup_amount(message: Message, state: FSMContext):
             payment_url = payment_data.get("payment_url")
             transaction_id = payment_data.get("transaction_id")
 
-            # Создаем клавиатуру с кнопкой-ссылкой (URL button)
+            # InlineKeyboardMarkup для URL не требует callback_data
             keyboard = InlineKeyboardMarkup(
                 inline_keyboard=[
                     [
@@ -160,7 +168,7 @@ async def process_topup_amount(message: Message, state: FSMContext):
                 reply_markup=keyboard,
                 parse_mode="HTML",
             )
-            # Сбрасываем состояние ввода суммы
+            # Сбрасываем стейт (токены остаются)
             await state.set_state(None)
         else:
             await message.answer(

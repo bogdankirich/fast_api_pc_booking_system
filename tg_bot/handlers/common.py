@@ -18,14 +18,3 @@ async def cmd_start(message: Message):
         "Для начала работы войдите в систему 👇",
         reply_markup=get_start_menu(),
     )
-
-
-#
-# @router.message(F.text == "⚙️ Настройки профиля")
-# async def settings_menu(message: Message):
-#    await message.answer(
-#        "⚙️ Настройки профиля\n\n"
-#        "Здесь будут настройки вашего профиля.\n"
-#        "Функционал в разработке."
-#    )
-#

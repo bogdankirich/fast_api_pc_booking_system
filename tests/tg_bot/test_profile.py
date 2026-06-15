@@ -37,7 +37,7 @@ async def test_cmd_profile_success_regular_user(
         await cmd_profile(message, authenticated_fsm_context)
 
     mock_api_client.get.assert_called_once_with(
-        "/api/v1/users/me", authenticated_fsm_context
+        "/api/v1/users/me", state=authenticated_fsm_context
     )
 
     message.answer.assert_called_once()  # type: ignore

@@ -30,6 +30,7 @@ async def main():
 
     try:
         logging.info("Starting Telegram Bot...")
+        await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
     finally:
         await redis_client.aclose()
