@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.dependencies import (
@@ -11,24 +10,16 @@ from app.api.dependencies.dependencies import (
 )
 from app.db.database import get_db_session
 from app.models.user import User
-from app.schemas.booking import BookingCreate, BookingResponce
+from app.schemas.booking import (
+    AdminCashBookingRequest,
+    AdminEndSessionRequest,
+    AdminFutureBookingRequest,
+    BookingCreate,
+    BookingResponce,
+)
 from app.services.booking import BookingService
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
-
-
-# --- СХЕМЫ ДЛЯ АДМИНСКИХ ЗАПРОСОВ ---
-
-
-class AdminCashBookingRequest(BaseModel):
-    pc_id: int
-    hours: int
-
-
-class AdminEndSessionRequest(BaseModel):
-    pc_id: int
-
-
 # --- КЛИЕНТСКИЕ ЭНДПОИНТЫ ---
 
 
@@ -98,6 +89,44 @@ async def admin_cash_booking(
     try:
         booking = await booking_service.create_cash_booking(db, booking_in=booking_in)
         return {"status": "success", "booking_id": booking.id}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/admin/future-booking", status_code=status.HTTP_201_CREATED)
+async def admin_future_booking(
+    payload: AdminFutureBookingRequest,
+    db: AsyncSession = Depends(get_db_session),
+    booking_service: BookingService = Depends(get_booking_service),
+    current_admin: User = Depends(get_admin_user_hybrid),
+):
+    # Убеждаемся, что время, пришедшее от клиента, имеет часовой пояс UTC (или приводим его)
+    start_time = (
+        payload.start_time
+        if payload.start_time.tzinfo
+        else payload.start_time.replace(tzinfo=timezone.utc)
+    )
+    end_time = (
+        payload.end_time
+        if payload.end_time.tzinfo
+        else payload.end_time.replace(tzinfo=timezone.utc)
+    )
+
+    booking_in = BookingCreate(
+        pc_id=payload.pc_id, start_time=start_time, end_time=end_time
+    )
+
+    try:
+        # Мы можем переиспользовать метод cash_booking, так как он уже умеет
+        # создавать бронь без списания с электронного баланса!
+        booking = await booking_service.create_cash_booking(
+            db, booking_in=booking_in, guest_name=payload.guest_name
+        )
+        return {
+            "status": "success",
+            "booking_id": booking.id,
+            "guest_name": payload.guest_name,
+        }
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

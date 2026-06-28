@@ -35,3 +35,19 @@ class BookingResponce(BookingBase):
     status: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdminCashBookingRequest(BaseModel):
+    pc_id: int
+    hours: int
+
+
+class AdminEndSessionRequest(BaseModel):
+    pc_id: int
+
+
+class AdminFutureBookingRequest(BaseModel):
+    pc_id: int
+    start_time: datetime
+    end_time: datetime
+    guest_name: str | None = None

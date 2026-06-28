@@ -157,8 +157,9 @@ class BookingService:
         )
         return True
 
+    # ДОБАВЛЕН АРГУМЕНТ guest_name
     async def create_cash_booking(
-        self, db: AsyncSession, booking_in: BookingCreate
+        self, db: AsyncSession, booking_in: BookingCreate, guest_name: str | None = None
     ) -> Booking:
 
         if booking_in.start_time >= booking_in.end_time:
@@ -193,6 +194,10 @@ class BookingService:
         booking_data["total_cost"] = total_cost
         booking_data["status"] = "active"
 
+        # Можно раскомментировать, если решишь добавить поле в БД
+        # if guest_name:
+        #     booking_data["notes"] = f"Гость: {guest_name}"
+
         db_obj = Booking(**booking_data)
         db.add(db_obj)
 
@@ -207,11 +212,23 @@ class BookingService:
         await db.commit()
         await db.refresh(db_obj)
 
-        end_time_iso = db_obj.end_time.isoformat()
+        # --- ИСПРАВЛЕНИЕ БАГА LIVE MAP ДЛЯ АДМИНКИ ---
+        now_utc = datetime.now(timezone.utc)
 
-        await manager.broadcast_pc_update(
-            pc_id=db_obj.pc_id, status="occupied", end_time=end_time_iso
-        )
+        start_time_utc = db_obj.start_time
+        if start_time_utc.tzinfo is None:
+            start_time_utc = start_time_utc.replace(tzinfo=timezone.utc)
+
+        end_time_utc = db_obj.end_time
+        if end_time_utc.tzinfo is None:
+            end_time_utc = end_time_utc.replace(tzinfo=timezone.utc)
+
+        # Обновляем карту ТОЛЬКО если сеанс начинается прямо сейчас
+        if start_time_utc <= now_utc <= end_time_utc:
+            end_time_iso = db_obj.end_time.replace(tzinfo=None).isoformat()
+            await manager.broadcast_pc_update(
+                pc_id=db_obj.pc_id, status="occupied", end_time=end_time_iso
+            )
 
         return db_obj
 
