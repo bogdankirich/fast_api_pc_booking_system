@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -92,26 +92,52 @@ class BookingService:
         )
 
         if current_user.telegram_id:
-            end_time_naive = db_obj.end_time.replace(tzinfo=None)
-            now_local_naive = datetime.now(ZoneInfo("Europe/Kyiv")).replace(tzinfo=None)
-            seconds_until_end = (end_time_naive - now_local_naive).total_seconds()
+            # 1. Берем текущее время строго в UTC
+            now_utc = datetime.now(timezone.utc)
+
+            # 2. Берем время конца брони. Если SQLAlchemy отдает его без зоны (naive),
+            # мы явно говорим, что это UTC, чтобы питон мог их вычесть.
+            end_time_utc = db_obj.end_time
+            if end_time_utc.tzinfo is None:
+                end_time_utc = end_time_utc.replace(tzinfo=timezone.utc)
+
+            # 3. Считаем реальную разницу в секундах
+            seconds_until_end = (end_time_utc - now_utc).total_seconds()
             countdown_seconds = int(seconds_until_end - (15 * 60))
 
+            # 4. Если до конца сеанса больше 15 минут — планируем задачу
             if countdown_seconds > 0:
-                end_time_str = db_obj.end_time.strftime("%H:%M")
+                # Для текста в Телеграме переводим UTC обратно в Киев!
+                kiev_tz = ZoneInfo("Europe/Kyiv")
+                end_time_str = end_time_utc.astimezone(kiev_tz).strftime("%H:%M")
+
                 send_booking_reminder.apply_async(  # type: ignore
                     kwargs={
+                        "booking_id": db_obj.id,
                         "telegram_id": current_user.telegram_id,
                         "pc_number": db_obj.pc_id,
                         "end_time_str": end_time_str,
                     },
                     countdown=countdown_seconds,
                 )
-        end_time_iso = db_obj.end_time.replace(tzinfo=None).isoformat()
+        now_utc = datetime.now(timezone.utc)
 
-        await manager.broadcast_pc_update(
-            pc_id=db_obj.pc_id, status="occupied", end_time=end_time_iso
-        )
+        start_time_utc = db_obj.start_time
+        if start_time_utc.tzinfo is None:
+            start_time_utc = start_time_utc.replace(tzinfo=timezone.utc)
+
+        end_time_utc = db_obj.end_time
+        if end_time_utc.tzinfo is None:
+            end_time_utc = end_time_utc.replace(tzinfo=timezone.utc)
+
+        # Обновляем карту в реальном времени, ТОЛЬКО если сеанс начался
+        if start_time_utc <= now_utc <= end_time_utc:
+            # Для фронтенда оставляем формат, который он ожидает (наивный ISO)
+            end_time_iso = db_obj.end_time.replace(tzinfo=None).isoformat()
+            await manager.broadcast_pc_update(
+                pc_id=db_obj.pc_id, status="occupied", end_time=end_time_iso
+            )
+
         return db_obj
 
     async def cancel_booking(
