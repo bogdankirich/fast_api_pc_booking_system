@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.database import get_db_session
 from app.main import app
 from app.models.base import Base
@@ -16,6 +17,8 @@ from app.models.bookings import Booking
 from app.models.pc import PC
 from app.models.user import User
 from app.models.zone import Zone
+
+limiter.enabled = False
 
 TEST_DATABASE_URL = (
     f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"

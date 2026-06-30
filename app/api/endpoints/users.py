@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.dependencies import get_current_user, get_user_service
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.database import get_db_session
 from app.models.transactions import Transaction
 from app.models.user import User
@@ -25,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def register_user(
+    request: Request,
     user_in: UserCreate,
     db: AsyncSession = Depends(get_db_session),
     user_service: UserService = Depends(get_user_service),
@@ -38,12 +41,17 @@ async def register_user(
 
 
 @router.get("/me", response_model=UserResponse)
-async def read_users_me(current_user: User = Depends(get_current_user)):
+@limiter.limit("30/minute")
+async def read_users_me(
+    request: Request, current_user: User = Depends(get_current_user)
+):
     return current_user
 
 
 @router.patch("/me", response_model=UserResponse)
+@limiter.limit("10/minute")
 async def update_users_me(
+    request: Request,
     user_update: UserUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -59,20 +67,22 @@ async def update_users_me(
 
 
 @router.post("/me/balance/top-up", response_model=TopUpResponse)
+@limiter.limit("5/minute")
 async def top_up_balance(
-    request: TopUpRequest,
+    request: Request,
+    payload: TopUpRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):
 
     transaction_repo = TransactionRepository(Transaction)
     transaction = await transaction_repo.create_pending_transaction(
-        db=db, user_id=current_user.id, amount=request.amount
+        db=db, user_id=current_user.id, amount=payload.amount
     )
 
     payment_service = StripePayService()
     payment_url = await payment_service.create_checkout_session(
-        amount=request.amount,
+        amount=payload.amount,
         transaction_id=str(transaction.id),
         user_email=current_user.email,
     )
@@ -129,7 +139,9 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db_ses
 
 
 @router.get("/me/transactions", response_model=list[TransactionHistoryResponse])
+@limiter.limit("30/minute")
 async def get_user_transaction_history(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ):

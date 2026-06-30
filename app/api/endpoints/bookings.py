@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.dependencies import (
@@ -8,6 +8,7 @@ from app.api.dependencies.dependencies import (
     get_booking_service,
     get_current_user,
 )
+from app.core.rate_limit import limiter
 from app.db.database import get_db_session
 from app.models.user import User
 from app.schemas.booking import (
@@ -24,7 +25,9 @@ router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
 
 @router.post("/", response_model=BookingResponce, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create_booking(
+    request: Request,
     booking_in: BookingCreate,
     db: AsyncSession = Depends(get_db_session),
     booking_service: BookingService = Depends(get_booking_service),
@@ -39,7 +42,9 @@ async def create_booking(
 
 
 @router.get("/", response_model=list[BookingResponce])
+@limiter.limit("30/minute")
 async def get_my_bookings(
+    request: Request,
     skip: int = 0,
     limit: int = 10,
     db: AsyncSession = Depends(get_db_session),
@@ -52,7 +57,9 @@ async def get_my_bookings(
 
 
 @router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
 async def cancel_booking(
+    request: Request,
     booking_id: int,
     db: AsyncSession = Depends(get_db_session),
     booking_service: BookingService = Depends(get_booking_service),
@@ -74,7 +81,9 @@ async def cancel_booking(
 
 
 @router.post("/admin/cash-booking", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def admin_cash_booking(
+    request: Request,
     payload: AdminCashBookingRequest,
     db: AsyncSession = Depends(get_db_session),
     booking_service: BookingService = Depends(get_booking_service),
@@ -94,7 +103,9 @@ async def admin_cash_booking(
 
 
 @router.post("/admin/future-booking", status_code=status.HTTP_201_CREATED)
+@limiter.limit("20/minute")
 async def admin_future_booking(
+    request: Request,
     payload: AdminFutureBookingRequest,
     db: AsyncSession = Depends(get_db_session),
     booking_service: BookingService = Depends(get_booking_service),
@@ -132,7 +143,9 @@ async def admin_future_booking(
 
 
 @router.post("/admin/end-session")
+@limiter.limit("20/minute")
 async def admin_end_session(
+    request: Request,
     payload: AdminEndSessionRequest,
     db: AsyncSession = Depends(get_db_session),
     booking_service: BookingService = Depends(get_booking_service),

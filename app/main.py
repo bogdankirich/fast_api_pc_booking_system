@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqladmin import Admin
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -8,6 +10,7 @@ from app.admin.views import BookingAdmin, LiveMapView, PCAdmin, UserAdmin
 from app.api.endpoints import auth, bookings, pcs, users, websockets, zones
 from app.api.endpoints.websockets import router as websockets_router
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.db.database import engine
 
 app = FastAPI(
@@ -35,6 +38,9 @@ app.add_middleware(
         "Access-Control-Allow-Origin",
     ],
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
 
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")

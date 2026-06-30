@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.dependencies import get_user_service
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.core.security import create_access_token, create_refresh_token
 from app.db.database import get_db_session
 from app.schemas.token import Token, TokenRefreshRequest
@@ -24,7 +25,9 @@ oauth.register(
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")
 async def login_for_access_token(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db_session),
     user_service: UserService = Depends(get_user_service),
@@ -49,12 +52,14 @@ async def login_for_access_token(
 
 
 @router.get("/login/google")
+@limiter.limit("20/minute")
 async def login_google(request: Request):
     redirect_uri = request.url_for("auth_google_callback")
     return await oauth.google.authorize_redirect(request, str(redirect_uri))
 
 
 @router.get("/auth/google/callback", response_model=Token)
+@limiter.limit("20/minute")
 async def auth_google_callback(
     request: Request,
     db: AsyncSession = Depends(get_db_session),
@@ -97,7 +102,9 @@ async def auth_google_callback(
 
 
 @router.post("/refresh", response_model=Token)
+@limiter.limit("10/minute")
 async def refresh_token(
+    request: Request,
     request_data: TokenRefreshRequest,
     db: AsyncSession = Depends(get_db_session),
     user_service: UserService = Depends(get_user_service),

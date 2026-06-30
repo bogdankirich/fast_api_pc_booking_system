@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     STRIPE_SECRET_KEY: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
+    RATE_LIMIT_REDIS_URL: str = "redis://redis:6379/2"
 
     @computed_field
     @property
